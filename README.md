@@ -65,3 +65,22 @@ pipx uninstall thc4me || true
 ### install new tag
 ver="vX.Y.Z"
 pipx install --force "https://github.com/Pa7ch3s/thc4me/releases/download/${ver}/thc4me-${ver#v}-py3-none-any.whl"
+
+---
+
+# Troubleshooting
+
+* 404 on wheel URL
+Use an existing tag and exact filename from the release page.
+
+* Command not found after install
+Add ~/.local/bin to PATH (pipx ensurepath).
+
+* Kali / root shells
+Prefer non-root user for pipx. If you must run as root, export PATH explicitly:
+
+export PATH="/root/.local/bin:$PATH"
+
+
+### Uninstall
+pipx uninstall thc4me or pip uninstall thc4me.
