@@ -1,4 +1,4 @@
-# thc4me — Thick Client Extension (CLI + Daemon)
+# thc4me.py — Thick Client Extension (CLI + Daemon)
 
 [![build-release](https://github.com/Pa7ch3s/thc4me/actions/workflows/release.yml/badge.svg)](../../actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -33,7 +33,7 @@ pip install --user "https://github.com/Pa7ch3s/thc4me/releases/download/vX.Y.Z/t
 ```
 start HTTP API on 127.0.0.1:8000
 thc4me-daemon
-### health check
+#health check
 curl -s http://127.0.0.1:8000/health | jq
 ```
 
@@ -66,10 +66,10 @@ Output schema (scan)
 # Upgrade
 
 ```
-### remove old
+#remove old
 pipx uninstall thc4me || true
 
-### install new tag
+#install new tag
 ver="vX.Y.Z"
 pipx install --force "https://github.com/Pa7ch3s/thc4me/releases/download/${ver}/thc4me-${ver#v}-py3-none-any.whl"
 ```
@@ -103,7 +103,7 @@ cd thc4me
 python -m pip install --upgrade build
 python -m build
 
-### run locally
+#run locally
 pipx install --force dist/thc4me-*.whl
 ```
 
@@ -111,10 +111,10 @@ pipx install --force dist/thc4me-*.whl
 
 # Roadmap
 
-*YARA ruleset hook.
+* YARA ruleset hook.
 
-*Recursive archive triage.
+* Recursive archive triage.
 
-*More parsers (DEX, .NET).
+* More parsers (DEX, .NET).
 
-*Rich HTML report.
+* Rich HTML report.
