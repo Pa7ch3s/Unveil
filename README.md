@@ -112,9 +112,6 @@ pipx install --force dist/thc4me-*.whl
 # Roadmap
 
 * YARA ruleset hook.
-
 * Recursive archive triage.
-
 * More parsers (DEX, .NET).
-
 * Rich HTML report.
