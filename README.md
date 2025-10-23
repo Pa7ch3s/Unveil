@@ -29,10 +29,9 @@ pip install --user "https://github.com/Pa7ch3s/thc4me/releases/download/vX.Y.Z/t
 ---
 
 # Daemon
+start HTTP API on 127.0.0.1:8000
 
-### start HTTP API on 127.0.0.1:8000
-thc4me-daemon
-
+# thc4me-daemon
 ### health check
 curl -s http://127.0.0.1:8000/health | jq
 
