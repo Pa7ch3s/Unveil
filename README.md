@@ -27,17 +27,26 @@ pipx install "https://github.com/Pa7ch3s/thc4me/releases/download/vX.Y.Z/thc4me-
 pip install --user "https://github.com/Pa7ch3s/thc4me/releases/download/vX.Y.Z/thc4me-X.Y.Z-py3-none-any.whl"
 ```
 ---
+# Commands
+```
+# pretty-print
+thc4me scan /path/to/file | jq
 
+# save to file
+thc4me scan /path/to/file > result.json
+```
+---
 # Daemon
 
 ```
 start HTTP API on 127.0.0.1:8000
 thc4me-daemon
+
 #health check
 curl -s http://127.0.0.1:8000/health | jq
 ```
 
-API (daemon)
+# API (daemon)
 * GET /health → {"ok": true}
 * POST /scan body:
 
