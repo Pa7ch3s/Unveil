@@ -85,3 +85,28 @@ export PATH="/root/.local/bin:$PATH"
 
 ### Uninstall
 pipx uninstall thc4me or pip uninstall thc4me.
+
+---
+
+# Development
+```
+git clone git@github.com:Pa7ch3s/thc4me.git
+cd thc4me
+python -m pip install --upgrade build
+python -m build
+
+### run locally
+pipx install --force dist/thc4me-*.whl
+```
+
+---
+
+# Roadmap
+
+*YARA ruleset hook.
+
+*Recursive archive triage.
+
+*More parsers (DEX, .NET).
+
+*Rich HTML report.
