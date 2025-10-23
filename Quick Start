@@ -1,0 +1,17 @@
+# help
+thc4me -h
+
+# version
+thc4me --version
+
+# scan a file → JSON (stdout)
+thc4me scan /path/to/binary
+
+# pretty printed JSON
+thc4me scan --pretty /path/to/binary
+
+# strings, imports, entropy, manifest
+thc4me strings /path/to/binary
+thc4me imports /path/to/binary
+thc4me entropy /path/to/binary
+thc4me manifest /path/to/app.apk
