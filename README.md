@@ -62,8 +62,6 @@ Output schema (scan)
 ### remove old
 pipx uninstall thc4me || true
 
----
-
 ### install new tag
 ver="vX.Y.Z"
 pipx install --force "https://github.com/Pa7ch3s/thc4me/releases/download/${ver}/thc4me-${ver#v}-py3-none-any.whl"
