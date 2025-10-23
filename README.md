@@ -28,12 +28,12 @@ pip install --user "https://github.com/Pa7ch3s/thc4me/releases/download/vX.Y.Z/t
 ```
 ---
 
-Daemon
+# Daemon
 
-# start HTTP API on 127.0.0.1:8000
+### start HTTP API on 127.0.0.1:8000
 thc4me-daemon
 
-# health check
+### health check
 curl -s http://127.0.0.1:8000/health | jq
 
 API (daemon)
@@ -59,12 +59,12 @@ Output schema (scan)
 
 ---
 
-Upgrade
-# remove old
+# Upgrade
+### remove old
 pipx uninstall thc4me || true
 
 ---
 
-# install new tag
+### install new tag
 ver="vX.Y.Z"
 pipx install --force "https://github.com/Pa7ch3s/thc4me/releases/download/${ver}/thc4me-${ver#v}-py3-none-any.whl"
