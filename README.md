@@ -29,21 +29,25 @@ pip install --user "https://github.com/Pa7ch3s/thc4me/releases/download/vX.Y.Z/t
 ---
 
 # Daemon
-start HTTP API on 127.0.0.1:8000
 
-# thc4me-daemon
+```
+start HTTP API on 127.0.0.1:8000
+thc4me-daemon
 ### health check
 curl -s http://127.0.0.1:8000/health | jq
+```
 
 API (daemon)
-GET /health → {"ok": true}
-
-POST /scan body:
+### GET /health → {"ok": true}
+### POST /scan body:
+```
 { "path": "/absolute/path/to/file", "pretty": true }
+```
 
 Response: same structure as thc4me scan.
 
 Output schema (scan)
+```
 {
   "path": "...",
   "size": 12345,
@@ -55,16 +59,20 @@ Output schema (scan)
   "entropy": { "overall": 5.8, "suspicious": false },
   "manifest": { "...": "APK/IPA manifest or Info.plist, if applicable" }
 }
+```
 
 ---
 
 # Upgrade
+
+```
 ### remove old
 pipx uninstall thc4me || true
 
 ### install new tag
 ver="vX.Y.Z"
 pipx install --force "https://github.com/Pa7ch3s/thc4me/releases/download/${ver}/thc4me-${ver#v}-py3-none-any.whl"
+```
 
 ---
 
