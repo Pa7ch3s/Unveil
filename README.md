@@ -1,4 +1,4 @@
-# THC4ME — Thick Client Extension (CLI + Daemon)
+# thc4me — Thick Client Extension (CLI + Daemon)
 
 [![build-release](https://github.com/Pa7ch3s/thc4me/actions/workflows/release.yml/badge.svg)](../../actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
