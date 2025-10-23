@@ -79,8 +79,9 @@ Add ~/.local/bin to PATH (pipx ensurepath).
 * Kali / root shells
 Prefer non-root user for pipx. If you must run as root, export PATH explicitly:
 
+```
 export PATH="/root/.local/bin:$PATH"
-
+```
 
 ### Uninstall
 pipx uninstall thc4me or pip uninstall thc4me.
