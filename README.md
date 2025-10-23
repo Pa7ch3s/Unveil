@@ -25,3 +25,46 @@ Static-triage CLI and lightweight HTTP daemon for quick file inspection. Support
 pipx install "https://github.com/Pa7ch3s/thc4me/releases/download/vX.Y.Z/thc4me-X.Y.Z-py3-none-any.whl"
 # or system-wide user install
 pip install --user "https://github.com/Pa7ch3s/thc4me/releases/download/vX.Y.Z/thc4me-X.Y.Z-py3-none-any.whl"
+```
+---
+
+Daemon
+
+# start HTTP API on 127.0.0.1:8000
+thc4me-daemon
+
+# health check
+curl -s http://127.0.0.1:8000/health | jq
+
+API (daemon)
+GET /health → {"ok": true}
+
+POST /scan body:
+{ "path": "/absolute/path/to/file", "pretty": true }
+
+Response: same structure as thc4me scan.
+
+Output schema (scan)
+{
+  "path": "...",
+  "size": 12345,
+  "hashes": { "md5": "...", "sha1": "...", "sha256": "..." },
+  "type": "PE|ELF|Mach-O|APK|IPA|Unknown",
+  "sections": [{ "name": ".text", "size": 4096, "entropy": 6.7 }],
+  "imports": [{ "library": "kernel32.dll", "symbols": ["CreateFileA", "..."] }],
+  "strings": { "count": 321, "sample": ["http://...", "User-Agent", "..."] },
+  "entropy": { "overall": 5.8, "suspicious": false },
+  "manifest": { "...": "APK/IPA manifest or Info.plist, if applicable" }
+}
+
+---
+
+Upgrade
+# remove old
+pipx uninstall thc4me || true
+
+---
+
+# install new tag
+ver="vX.Y.Z"
+pipx install --force "https://github.com/Pa7ch3s/thc4me/releases/download/${ver}/thc4me-${ver#v}-py3-none-any.whl"
