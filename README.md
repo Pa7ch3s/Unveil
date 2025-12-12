@@ -11,7 +11,7 @@ Supports PE, ELF, Mach-O, APK, IPA, and more.
 THC4me provides rapid static inspection of binaries and packages via a command-line interface or REST API.
 It extracts metadata, hashes, imports, entropy metrics, and manifest information — ideal for quick local analysis or integration into automated pipelines.
 
-##⚙️ Key Features
+⚙️ Key Features
 - 🔍 Fast static scan → JSON output (size, hashes, sections, imports, entropy)
 - 🧩 Utilities: strings, imports, entropy, manifest (APK/IPA)
 - 🌐 Lightweight API daemon with /health and /scan endpoints
