@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "unv"
-version = "0.3.2"
+version = "0.4.0"
 requires-python = ">=3.9"
 dependencies = ["lief","pefile","fastapi","uvicorn","python-multipart"]
 authors = [{name="Jerrod Baker"}]
@@ -16,4 +16,8 @@ include = ["unv*"]
 
 [project.scripts]
 unv = "unv.cli:main"
+unveil = "unv.cli:main"
 unv-daemon = "unv.daemon:main"
+
+[tool.setuptools.package-data]
+unv = ["Unveil_banner.txt"]
