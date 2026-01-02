@@ -1,119 +1,38 @@
-#!/usr/bin/env python3
-import sys
-import argparse
 from pathlib import Path
-from importlib import resources
-from importlib.metadata import version as pkg_version
 
-from unv import static_parser
+print((Path(__file__).resolve().parent / "assets" / "banner.txt").read_text())
 
 
-def get_version():
-    try:
-        return pkg_version("unv")
-    except Exception:
-        return "unknown"
-
-
-def print_banner():
-    try:
-        banner = resources.files("unv").joinpath("Unveil_banner.txt").read_text()
-        print(banner.rstrip())
-    except Exception:
-        pass
-
-
-def cmd_scan(args):
-    result = static_parser.analyze(args.target)
-    if args.pretty:
-        import json
-        print(json.dumps(result, indent=2))
-    else:
-        print(result)
-
-
-def cmd_strings(args):
-    static_parser.strings(args.target)
-
-
-def cmd_imports(args):
-    static_parser.imports(args.target)
-
-
-def cmd_entropy(args):
-    static_parser.entropy(args.target)
-
-
-def cmd_manifest(args):
-    static_parser.manifest(args.target)
-
-
-def cmd_tools(args):
-    static_parser.tools()
-
-
-def cmd_manual(args):
-    static_parser.manual()
-
-
-def build_parser():
-    parser = argparse.ArgumentParser(
-        prog="unv",
-        description="unv — Unveiling thick-client execution surfaces",
-    )
-
-    parser.add_argument(
-        "-v",
-        "--version",
-        action="version",
-        version=f"unv {get_version()}",
-    )
-
-    sub = parser.add_subparsers(dest="command")
-
-    p = sub.add_parser("scan", help="Scan a file and output JSON")
-    p.add_argument("target")
-    p.add_argument("--pretty", action="store_true")
-    p.set_defaults(func=cmd_scan)
-
-    p = sub.add_parser("strings", help="Extract printable strings")
-    p.add_argument("target")
-    p.set_defaults(func=cmd_strings)
-
-    p = sub.add_parser("imports", help="List imported libraries / symbols")
-    p.add_argument("target")
-    p.set_defaults(func=cmd_imports)
-
-    p = sub.add_parser("entropy", help="Compute file entropy")
-    p.add_argument("target")
-    p.set_defaults(func=cmd_entropy)
-
-    p = sub.add_parser("manifest", help="Dump AndroidManifest / Info.plist")
-    p.add_argument("target")
-    p.set_defaults(func=cmd_manifest)
-
-    p = sub.add_parser("tools", help="Show available analysis modules")
-    p.set_defaults(func=cmd_tools)
-
-    p = sub.add_parser("manual", help="Show unv manual")
-    p.set_defaults(func=cmd_manual)
-
-    return parser
-
+import argparse
+import json
+from pathlib import Path
+from unv.engine import run
 
 def main():
-    print_banner()
+    p = argparse.ArgumentParser()
+    p.add_argument("-C", "--target", required=True)
+    p.add_argument("-e", action="store_true")
+    p.add_argument("-O", action="store_true")
+    p.add_argument("-f", action="store_true")
+    p.add_argument("-q", "--quiet", action="store_true")
+    p.add_argument("-xh", metavar="FILE")
+    p.add_argument("-xj", metavar="FILE")
+    p.add_argument("-xx", metavar="FILE")
+    args = p.parse_args()
 
-    parser = build_parser()
-    args = parser.parse_args()
+    report = run(args.target)
 
-    if not args.command:
-        parser.print_help()
-        return 0
+    base = f"unveil-{Path(args.target).name}.json"
 
-    args.func(args)
-    return 0
+    if not args.quiet:
+        print(json.dumps(report, indent=2))
 
+    if args.xh:
+        from unv.renderer import render
+        Path(args.xh).write_text(render(report))
 
-if __name__ == "__main__":
-    sys.exit(main())
+    if args.xj:
+        Path(args.xj).write_text(json.dumps(report, indent=2))
+
+    if args.xx:
+        Path(args.xx).write_text(json.dumps(report))
