@@ -45,12 +45,6 @@ pipx install git+https://github.com/Pa7ch3s/unv.git
 
 ---
 
-## Usage:
-
-```bash
-unveil -C /path/to/target -xj output.json
-```
-
 Verify/Display all available flags:
 ```
 unveil -h
