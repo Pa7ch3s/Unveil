@@ -19,13 +19,8 @@ It focuses on **exploit viability**, not just indicators.
 > * Structured, JSON-first output
 
 ---
-## Unveil answers:
 
-> **“Can this become a real-world exploit chain?”**
-> **“What role does it play?”**
-> **“What links are missing?”**
-
-It models execution surfaces, trust boundaries, persistence anchors, and lateral bridges... then tells you what to hunt next.
+Models execution surfaces, trust boundaries, persistence anchors, and lateral bridges... then tells you what to hunt next.
 
 No sandboxes.
 No cloud.
