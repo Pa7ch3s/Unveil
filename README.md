@@ -15,7 +15,7 @@ It exists for one reason:
 
 ## What it does
 
-Unveil performs fast, local static triage on binaries, apps, and packages — turning opaque artifacts into structured, actionable intel.
+Unveil performs fast, local static triage on binaries, apps, and packages; turning opaque artifacts into structured, actionable intel.
 
 It focuses on **exploit viability**, not just indicators.
 
@@ -41,7 +41,7 @@ Unveil answers:
 > **“What role does it play?”**
 > **“What links are missing?”**
 
-It models execution surfaces, trust boundaries, persistence anchors, and lateral bridges — then tells you what to hunt next.
+It models execution surfaces, trust boundaries, persistence anchors, and lateral bridges... then tells you what to hunt next.
 
 No sandboxes.
 No cloud.
@@ -79,7 +79,7 @@ unv strings /path/to/target
 unv entropy /path/to/target
 ```
 
-All output is JSON — designed to drop directly into pipelines, tooling, and reports.
+> *All output is JSON; designed to drop directly into pipelines, tooling, and reports.*
 
 ---
 
