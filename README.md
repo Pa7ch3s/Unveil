@@ -26,7 +26,7 @@ It focuses on **exploit viability**, not just indicators.
 
 ## Supported formats
 
-*(expanding)*
+*(presently)*
 
 * Windows PE (.exe / .dll)
 * Mach-O (macOS binaries, .app bundles)
