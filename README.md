@@ -6,10 +6,7 @@ Unveil answers one question:
 
 > *Can this file become a real exploit chain — and how?*
 ---
-
-## What it does
-
-Unveil performs fast, local static triage on binaries, apps, and packages; turning opaque artifacts into structured, actionable intel.
+Performs fast, local static triage on binaries, apps, and packages; turning opaque artifacts into structured, actionable intel.
 
 It focuses on **exploit viability**, not just indicators.
 
@@ -22,10 +19,7 @@ It focuses on **exploit viability**, not just indicators.
 > * Structured, JSON-first output
 
 ---
-
-## Why Unveil exists
-
-Unveil answers:
+##Unveil answers:
 
 > **“Can this become a real-world exploit chain?”**
 > **“What role does it play?”**
