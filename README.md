@@ -46,6 +46,8 @@ pipx install git+https://github.com/Pa7ch3s/unv.git
 ## Usage
 
 ```bash
+unveil -C /path/to/target -xj output.json
+
 unv scan /path/to/target
 unv strings /path/to/target
 unv entropy /path/to/target
