@@ -90,7 +90,6 @@ def normalize_surfaces(surfaces):
             density_conf = "MED"
 
         base_conf = POWER_CONFIDENCE.get(b["power"], "LOW")
-
         order = {"LOW": 0, "MED": 1, "HIGH": 2}
         b["confidence"] = max(density_conf, base_conf, key=lambda x: order[x])
 
@@ -111,80 +110,72 @@ def run(target):
         }
         entry["class"] = classify(entry)
         verdict = compile([entry], [], {})
-        data = {
+        return {
             "metadata": {"target": target},
             "results": [entry],
             "verdict": verdict,
             "findings": [],
             "synth_indicators": [entry]
         }
-        return data
 
     count = 0
     tick(f"[SCAN] {target}")
 
-    for item in base.iterdir():
+    for item in base.rglob("*"):
         if count >= MAX_FILES:
             break
 
-        if item.name in SKIP_DIRS or item.is_symlink():
+        if item.is_symlink():
             continue
 
-        if item.is_file():
-            if item.stat().st_size > MAX_SIZE:
-                continue
-            if item.suffix.lower() in VALID_SUFFIX:
-                tick(f"[BIN] {item.name}")
-                try:
-                    entry = {
-                        "file": str(item),
-                        "analysis": analyze(str(item))
-                    }
-                    entry["class"] = classify(entry)
-                    results.append(entry)
-                    count += 1
-                except:
-                    pass
+        name = item.name.lower()
 
-        if item.is_dir() and item.suffix.lower() == ".app":
-            tick(f"[APP] {item.name}")
-            binpath = item / "Contents/MacOS"
-            if binpath.exists():
-                for f in binpath.iterdir():
-                    if f.stat().st_size > MAX_SIZE:
-                        continue
-                    tick(f"    └─ {f.name}")
-                    try:
-                        entry = {
-                            "file": str(f),
-                            "analysis": analyze(str(f))
-                        }
-                        entry["class"] = classify(entry)
-                        results.append(entry)
-                        count += 1
-                    except:
-                        pass
-                    if count >= MAX_FILES:
-                        break
+        # ---- UPGRADE 2: Promote preload.js into blade surface ----
+        if name == "preload.js":
+            results.append({
+                "file": str(item),
+                "analysis": {
+                    "target": "preload.js",
+                    "imports": [{"path": "preload.js", "binary": "js", "imports": []}],
+                    "entropy": 0.0
+                },
+                "class": "ELECTRON_PRELOAD_RCE"
+            })
+            count += 1
+            continue
+
+        if not item.is_file():
+            continue
+
+        if item.stat().st_size > MAX_SIZE:
+            continue
+
+        if item.suffix.lower() not in VALID_SUFFIX:
+            continue
+
+        try:
+            entry = {
+                "file": str(item),
+                "analysis": analyze(str(item))
+            }
+            entry["class"] = classify(entry)
+            results.append(entry)
+            count += 1
+        except:
+            pass
 
     tick("[DONE]")
 
-    indicators = []
-    for r in results:
-        indicators.append({"class": r["class"], "file": r["file"]})
-
+    indicators = [{"class": r["class"], "file": r["file"]} for r in results]
     surfaces = expand(indicators, {})
     synth = synthesize(surfaces)
     verdict = compile(synth, surfaces, {})
-
     findings = normalize_surfaces(surfaces)
 
-    data = {
+    return {
         "metadata": {"target": target},
         "results": results,
         "verdict": verdict,
         "findings": findings,
         "synth_indicators": synth
     }
-
-    return data
