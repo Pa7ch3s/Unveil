@@ -2,7 +2,6 @@
 
 Static triage CLI for executable and packaged artifacts.
 
-**TL;DR**
 Unveil answers one question:
 
 > 🧠 *Can this file become a real exploit chain — and how?*
