@@ -4,7 +4,7 @@ Static triage CLI for executable and packaged artifacts.
 
 Unveil answers one question:
 
-> 🧠 *Can this file become a real exploit chain — and how?*
+> *Can this file become a real exploit chain — and how?*
 
 It exists for one reason:
 
