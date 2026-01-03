@@ -53,7 +53,7 @@ unv strings /path/to/target
 unv entropy /path/to/target
 ```
 
-> *All output is JSON; designed to drop directly into pipelines, tooling, and reports.*
+> *All output is JSON. Designed to drop directly into pipelines, tooling, and reports.*
 
 ---
 
