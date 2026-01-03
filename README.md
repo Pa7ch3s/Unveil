@@ -1,7 +1,6 @@
 ## 🩸 Unveil
 
 Attack Path Discovery Engine
-Kill-Chain Completion Engine
 
 >*From binary to breach path.*
 ---
