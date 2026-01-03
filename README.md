@@ -1,8 +1,6 @@
-#Unveil
-🩸 Unveil
+## 🩸 Unveil
 
-
-## Static triage CLI for executable and packaged artifacts.
+# Static triage CLI for executable and packaged artifacts.
 
 **TL;DR**
 Unveil answers one question:
