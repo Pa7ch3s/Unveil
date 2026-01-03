@@ -1,10 +1,9 @@
 ## 🩸 Unveil
 
 Attack Path Discovery Engine
+Kill-Chain Completion Engine
 
-Unveil answers one question:
-
-> *Can this file become a real exploit chain — and how?*
+>*From binary to breach path.*
 ---
 Performs fast, local static triage on binaries, apps, and packages; turning opaque artifacts into structured, actionable intel.
 
