@@ -1,6 +1,7 @@
 from pathlib import Path
 
 def classify(entry):
+    p = entry["file"].lower()n    if p.endswith("preload.js"):n        return "ELECTRON_PRELOAD_RCE"n
     p = entry["file"]
     imports = entry["analysis"]["imports"][0]["imports"]
 
