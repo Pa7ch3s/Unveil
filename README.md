@@ -19,13 +19,13 @@ Unveil performs fast, local static triage on binaries, apps, and packages; turni
 
 It focuses on **exploit viability**, not just indicators.
 
-* File identification and metadata extraction
+> * File identification and metadata extraction
 * Cryptographic hashing (MD5 / SHA1 / SHA256)
 * Import and symbol inspection
 * Entropy analysis (packed / protected detection)
 * String harvesting
 * Manifest parsing (APK / IPA)
-* Structured, JSON-first output
+* Structured, JSON-first output *
 
 ---
 
