@@ -1,54 +1,92 @@
-# unveil (unv)
+#🩸 Unveil
 
-Static triage CLI for executable and packaged artifacts.
+## Static triage CLI for executable and packaged artifacts.
 
-unv is built for fast, local inspection when you need signal immediately — not a framework, not a sandbox, not exploitation.
+**TL;DR**
+Unveil answers one question:
+
+> 🧠 *Can this file become a real exploit chain — and how?*
+
+It exists for one reason:
+
+```
+To tell you what can be turned into a real exploit chain — immediately.
+```
 
 ---
 
 ## What it does
 
-- File identification and metadata
-- Hashing (MD5 / SHA1 / SHA256)
-- Import / symbol inspection
-- Entropy analysis
-- Strings extraction
-- Manifest parsing (APK / IPA)
-- JSON-first output
+Unveil performs fast, local static triage on binaries, apps, and packages — turning opaque artifacts into structured, actionable intel.
 
-No execution. No guessing.
+It focuses on **exploit viability**, not just indicators.
+
+* File identification and metadata extraction
+* Cryptographic hashing (MD5 / SHA1 / SHA256)
+* Import and symbol inspection
+* Entropy analysis (packed / protected detection)
+* String harvesting
+* Manifest parsing (APK / IPA)
+* Structured, JSON-first output
+
+---
+
+## Why Unveil exists
+
+Most tools answer:
+
+> “Is this suspicious?”
+
+Unveil answers:
+
+> **“Can this become a real-world exploit chain?”**
+> **“What role does it play?”**
+> **“What links are missing?”**
+
+It models execution surfaces, trust boundaries, persistence anchors, and lateral bridges — then tells you what to hunt next.
+
+No sandboxes.
+No cloud.
+No noise.
+Just signal.
 
 ---
 
 ## Supported formats
 
-PE • ELF • Mach-O • APK • IPA • ZIP / archives
+*(expanding)*
+
+* Windows PE (.exe / .dll)
+* Mach-O (macOS binaries, .app bundles)
+* ELF (Linux)
+* APK / IPA packages
+* ASAR / Electron apps
+* JavaScript preload / helper surfaces
 
 ---
 
 ## Install
 
+```bash
 pipx install git+https://github.com/Pa7ch3s/unv.git
+```
 
 ---
 
 ## Usage
 
-unv scan /path/to/file  
-unv strings /path/to/file  
-unv entropy /path/to/file  
+```bash
+unv scan /path/to/target
+unv strings /path/to/target
+unv entropy /path/to/target
+```
 
----
-
-## Relationship
-
-- unv → fast static triage
-- iiPry → thick-client surface intelligence
-
-Separate tools. Different purposes.
+All output is JSON — designed to drop directly into pipelines, tooling, and reports.
 
 ---
 
 ## License
 
 MIT
+
+
