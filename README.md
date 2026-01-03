@@ -31,10 +31,6 @@ It focuses on **exploit viability**, not just indicators.
 
 ## Why Unveil exists
 
-Most tools answer:
-
-> “Is this suspicious?”
-
 Unveil answers:
 
 > **“Can this become a real-world exploit chain?”**
