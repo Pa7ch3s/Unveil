@@ -8,9 +8,9 @@ Unveil answers one question:
 
 It exists for one reason:
 
-```
-To tell you what can be turned into a real exploit chain — immediately.
-```
+""
+To tell you what can be turned into a real exploit chain immediately.
+""
 
 ---
 
