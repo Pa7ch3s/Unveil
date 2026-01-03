@@ -2,14 +2,12 @@ from pathlib import Path
 
 def classify(entry):
     p = entry.get("file","").lower()
+
+    # --- Upgrade 2 blade recognition ---
     if p.endswith("preload.js"):
         return "ELECTRON_PRELOAD_RCE"
 
-
-    p = entry["file"].lower()n    if p.endswith("preload.js"):n        return "ELECTRON_PRELOAD_RCE"n
-    p = entry["file"]
     imports = entry["analysis"]["imports"][0]["imports"]
-
     tags = []
 
     if any("@rpath/Electron" in i for i in imports):
@@ -18,7 +16,7 @@ def classify(entry):
     if any("QtCore.framework" in i for i in imports):
         tags.append("QT_PLUGIN_RPATH_HIJACK")
 
-    if any("crashpad" in p.lower() or "helper" in p.lower() for _ in [0]):
+    if "crashpad" in p or "helper" in p:
         tags.append("HELPER_BRIDGE")
 
     if any(i.startswith("@executable_path") for i in imports):
