@@ -23,8 +23,11 @@ It focuses on **exploit viability**, not just indicators.
 "Models execution surfaces, trust boundaries, persistence anchors, and lateral bridges... then tells you what to hunt next."
 
 No sandboxes.
+
 No cloud.
+
 No noise.
+
 Just signal.
 
 ---
