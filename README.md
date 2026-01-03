@@ -1,6 +1,6 @@
 <img width="400" height="376" alt="image" src="https://github.com/user-attachments/assets/7b4f0b20-d5f2-45f6-a0eb-18fb95bb653f" />
 
-## 🩸 Unveil
+## Unveil
 
 Attack Path Discovery Engine
 
