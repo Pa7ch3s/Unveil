@@ -1,6 +1,6 @@
 ## 🩸 Unveil
 
-Static triage CLI for executable and packaged artifacts.
+Attack Path Discovery Engine
 
 Unveil answers one question:
 
