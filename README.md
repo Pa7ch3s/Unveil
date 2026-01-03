@@ -6,8 +6,8 @@ Attack Path Discovery Engine
 
 >*From binary to breach path.*
 ---
-Performs fast, local static triage on binaries, apps, and packages; turning opaque artifacts into structured, actionable intel.
-
+"Performs fast, local static triage on binaries, apps, and packages; turning opaque artifacts into structured, actionable intel."
+---
 It focuses on **exploit viability**, not just indicators.
 
 > * File identification and metadata extraction
