@@ -1,48 +1,58 @@
-from collections import defaultdict
+from unv.chain_closure import detect_candidates
+from unv.missing_link_engine import infer_missing_links
 
-REQUIRED_CHAIN = ["ANCHOR", "BRIDGE", "BLADE"]
+ROLE_ORDER = ["ANCHOR","BRIDGE","BLADE"]
 
-def compile(synth_indicators, surfaces, context):
-    roles = set()
-    completion = 0.0
-    hunt_queries = []
-    cwe_map = set()
+ROLE_WEIGHTS = {
+    "ANCHOR": 0.35,
+    "BRIDGE": 0.30,
+    "BLADE": 0.35
+}
+
+def compile(synth, surfaces, findings):
+    roles = {}
     families = set()
+    cwe = set()
+    hunt = set()
+    score = 0.0
 
-    for s in synth_indicators or []:
+    for s in synth:
         intel = s.get("intel", {})
-        role = intel.get("killchain_role")
-        weight = intel.get("completion_weight", 0)
+        r = intel.get("killchain_role")
+        if not r:
+            continue
 
-        if role:
-            roles.add(role)
-            completion += weight
+        roles[r] = True
+        score += intel.get("completion_weight", 0)
 
-        families.update(intel.get("families", []))
-        cwe_map.update(intel.get("cwe_classes", []))
+        families |= set(intel.get("families", []))
+        cwe |= set(intel.get("cwe_classes", []))
+        hunt |= set(intel.get("cve_search_tags", []))
 
-        for tag in intel.get("cve_search_tags", []):
-            hunt_queries.append(tag)
+    missing = [r for r in ROLE_ORDER if r not in roles]
 
-    completion = min(completion, 1.0)
+    anchors, bridges = detect_candidates(findings)
 
-    missing = [r for r in REQUIRED_CHAIN if r not in roles]
+    viability = min(round(score, 2), 1.0)
 
-    if completion >= 0.85:
-        band = "CRITICAL"
-    elif completion >= 0.6:
+    band = "LOW"
+    if viability >= 0.65:
         band = "HIGH"
-    elif completion >= 0.35:
+    elif viability >= 0.35:
         band = "MED"
-    else:
-        band = "LOW"
 
-    return {
+    verdict = {
         "exploitability_band": band,
-        "killchain_complete": completion >= 0.85,
-        "chain_completion": round(completion, 2),
+        "killchain_complete": len(missing) == 0,
+        "chain_completion": viability,
         "missing_roles": missing,
         "families": sorted(families),
-        "cwe_classes": sorted(cwe_map),
-        "hunt_queries": sorted(set(hunt_queries))
+        "cwe_classes": sorted(cwe),
+        "hunt_queries": sorted(hunt),
+        "anchor_candidates": anchors,
+        "bridge_candidates": bridges
     }
+
+    verdict["hunt_plan"] = infer_missing_links(missing)
+
+    return verdict
