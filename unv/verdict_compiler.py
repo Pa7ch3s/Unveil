@@ -1,34 +1,48 @@
-#cat > unveil/core/verdict_compiler.py << 'EOF'
-def compile(indicators, surfaces, fingerprint):
-    verdict = {
-        "exploitability_band": "LOW",
-        "killchain_complete": False,
-        "persistence_depth": 0,
-        "lateral_adjacency": False,
-        "reentry_survivable": False,
+from collections import defaultdict
+
+REQUIRED_CHAIN = ["ANCHOR", "BRIDGE", "BLADE"]
+
+def compile(synth_indicators, surfaces, context):
+    roles = set()
+    completion = 0.0
+    hunt_queries = []
+    cwe_map = set()
+    families = set()
+
+    for s in synth_indicators or []:
+        intel = s.get("intel", {})
+        role = intel.get("killchain_role")
+        weight = intel.get("completion_weight", 0)
+
+        if role:
+            roles.add(role)
+            completion += weight
+
+        families.update(intel.get("families", []))
+        cwe_map.update(intel.get("cwe_classes", []))
+
+        for tag in intel.get("cve_search_tags", []):
+            hunt_queries.append(tag)
+
+    completion = min(completion, 1.0)
+
+    missing = [r for r in REQUIRED_CHAIN if r not in roles]
+
+    if completion >= 0.85:
+        band = "CRITICAL"
+    elif completion >= 0.6:
+        band = "HIGH"
+    elif completion >= 0.35:
+        band = "MED"
+    else:
+        band = "LOW"
+
+    return {
+        "exploitability_band": band,
+        "killchain_complete": completion >= 0.85,
+        "chain_completion": round(completion, 2),
+        "missing_roles": missing,
+        "families": sorted(families),
+        "cwe_classes": sorted(cwe_map),
+        "hunt_queries": sorted(set(hunt_queries))
     }
-
-    if not indicators:
-        return verdict
-
-    classes = {i["class"] for i in indicators}
-
-    if "electron_asar_preload" in classes:
-        verdict["persistence_depth"] += 2
-        verdict["reentry_survivable"] = True
-
-    if "electron_helper_ipc" in classes:
-        verdict["lateral_adjacency"] = True
-        verdict["persistence_depth"] += 1
-
-    if "ats_mitm_downgrade" in classes:
-        verdict["killchain_complete"] = True
-
-    if verdict["persistence_depth"] >= 3 and verdict["killchain_complete"]:
-        verdict["exploitability_band"] = "CRITICAL"
-    elif verdict["persistence_depth"] >= 2:
-        verdict["exploitability_band"] = "HIGH"
-    elif verdict["persistence_depth"] >= 1:
-        verdict["exploitability_band"] = "MEDIUM"
-
-    return verdict
