@@ -5,12 +5,6 @@ Static triage CLI for executable and packaged artifacts.
 Unveil answers one question:
 
 > *Can this file become a real exploit chain — and how?*
-
-It exists for one reason:
-
-> *To tell you what can be turned into a real exploit chain immediately.*
-
-
 ---
 
 ## What it does
