@@ -52,8 +52,7 @@ unveil -h
 <img width="800" height="554" alt="image" src="https://github.com/user-attachments/assets/9cbd824f-a3b6-49ee-b782-aeee6faa208b" />
 
 ---
-Core Usage:
-(Analyze a single binary, installer, or artifact)
+
 ```
 unveil -C /path/to/target -xj report.json
 ```
