@@ -37,9 +37,11 @@ POWER_CHAIN = {
     "BLADE": ["BLADE"]
 }
 
+
 def tick(msg):
     sys.stderr.write(msg + "\n")
     sys.stderr.flush()
+
 
 def normalize_surfaces(surfaces):
     buckets = {}
@@ -98,6 +100,7 @@ def normalize_surfaces(surfaces):
 
     return findings
 
+
 def run(target):
     base = Path(target)
     results = []
@@ -129,6 +132,9 @@ def run(target):
             continue
 
         name = item.name.lower()
+
+        if name in SKIP_DIRS:
+            continue
 
         # ---- UPGRADE 2: Promote preload.js into blade surface ----
         if name == "preload.js":
@@ -168,9 +174,10 @@ def run(target):
 
     indicators = [{"class": r["class"], "file": r["file"]} for r in results]
     surfaces = expand(indicators, {})
-    synth = synthesize(surfaces)
-    verdict = compile(synth, surfaces, {})
+
     findings = normalize_surfaces(surfaces)
+    synth = synthesize(surfaces)
+    verdict = compile(synth, surfaces, findings)
 
     return {
         "metadata": {"target": target},
