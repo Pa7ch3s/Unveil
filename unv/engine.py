@@ -17,7 +17,7 @@ SKIP_DIRS = {
     "Command Line Tools"
 }
 
-VALID_SUFFIX = {".exe", ".bin", ".dylib", ".so"}
+VALID_SUFFIX = {".exe", ".bin", ".dylib", ".so", ".js"}
 
 SURFACE_POWER = {
     "qt_rpath_plugin_drop": "ANCHOR",
