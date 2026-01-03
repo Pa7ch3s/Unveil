@@ -19,7 +19,7 @@ It focuses on **exploit viability**, not just indicators.
 > * Structured, JSON-first output
 
 ---
-##Unveil answers:
+## Unveil answers:
 
 > **“Can this become a real-world exploit chain?”**
 > **“What role does it play?”**
