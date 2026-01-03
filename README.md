@@ -1,4 +1,6 @@
-🩸 ##Unveil
+#Unveil
+🩸 Unveil
+
 
 ## Static triage CLI for executable and packaged artifacts.
 
