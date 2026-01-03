@@ -49,10 +49,22 @@ pipx install git+https://github.com/Pa7ch3s/unv.git
 
 ```bash
 unveil -C /path/to/target -xj output.json
+```
 
-unv scan /path/to/target
-unv strings /path/to/target
-unv entropy /path/to/target
+Verify:
+```
+unveil -h
+```
+
+Display all available flags:
+```
+unveil -h
+```
+
+Core Usage
+(Analyze a single binary, installer, or artifact)
+```
+unveil -C /path/to/target -xj report.json
 ```
 
 > *All output is JSON. Designed to drop directly into pipelines, tooling, and reports.*
