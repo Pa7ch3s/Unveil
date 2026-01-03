@@ -37,7 +37,7 @@ It focuses on **exploit viability**, not just indicators.
 
 ---
 
-## Install
+## Install:
 
 ```bash
 pipx install git+https://github.com/Pa7ch3s/unv.git
@@ -45,23 +45,18 @@ pipx install git+https://github.com/Pa7ch3s/unv.git
 
 ---
 
-## Usage
+## Usage:
 
 ```bash
 unveil -C /path/to/target -xj output.json
 ```
 
-Verify:
+Verify/Display all available flags:
 ```
 unveil -h
 ```
 
-Display all available flags:
-```
-unveil -h
-```
-
-Core Usage
+Core Usage:
 (Analyze a single binary, installer, or artifact)
 ```
 unveil -C /path/to/target -xj report.json
