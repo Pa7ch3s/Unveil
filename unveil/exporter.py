@@ -1,7 +1,6 @@
-#cat > unveil/report/exporter.py << 'EOF'
 import json
 from pathlib import Path
-from unveil.report.render import render as render_html
+from unveil.renderer import render as render_html
 
 def export(json_path, mode):
     json_path = Path(json_path)

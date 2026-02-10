@@ -94,7 +94,7 @@ def _inspect_binary(path):
 
 
 def _mount_dmg(path):
-    mount_dir = tempfile.mkdtemp(prefix="unv_dmg_")
+    mount_dir = tempfile.mkdtemp(prefix="unveil_dmg_")
     _run(["hdiutil", "attach", path, "-nobrowse", "-mountpoint", mount_dir])
     if not os.path.isdir(mount_dir):
         shutil.rmtree(mount_dir, ignore_errors=True)
@@ -211,4 +211,4 @@ def tools():
 
 
 def manual():
-    return "unv performs static surface discovery on thick clients before dynamic analysis."
+    return "unveil performs static surface discovery on thick clients before dynamic analysis."

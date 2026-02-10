@@ -27,6 +27,8 @@ def _print_summary(report):
             frameworks.add("Electron")
         if "qt_" in cls or "qt " in cls:
             frameworks.add("Qt")
+        if "macos_launch" in cls or "launch_persistence" in cls:
+            frameworks.add("macOS (launchd)")
 
     print(f"Target: {target}")
     print(f"Exploitability: {band} (chain completion {completion:.2f})")

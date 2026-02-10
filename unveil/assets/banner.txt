@@ -7,4 +7,4 @@
 Y8a.    .a8P 88       88   `8b,d8'   "8b,   ,aa 88 88
  `"Y8888Y"'  88       88     "8"      `"Ybbd8"' 88 88
 
-                 UNVEIL — RADAR v1.0.1
+                 UNVEIL — RADAR v0.5.0
