@@ -1,10 +1,13 @@
-from unv.classifier import classify
-from unv.static_parser import analyze
-from unv.surface_expander import expand
-from unv.surface_synth import synthesize
-from unv.verdict_compiler import compile
+from unveil.classifier import classify
+from unveil.static_parser import analyze
+from unveil.surface_expander import expand
+from unveil.surface_synth import synthesize
+from unveil.verdict_compiler import compile
 from pathlib import Path
 import sys
+import tempfile
+import subprocess
+import shutil
 
 MAX_FILES = 80
 MAX_SIZE = 120 * 1024 * 1024
@@ -21,6 +24,8 @@ VALID_SUFFIX = {".exe", ".bin", ".dylib", ".so", ".js"}
 
 SURFACE_POWER = {
     "qt_rpath_plugin_drop": "ANCHOR",
+    "preload_write": "ANCHOR",
+    "macos_launch_persistence": "ANCHOR",
     "electron_helper": "BRIDGE",
     "electron_preload": "BLADE"
 }
@@ -151,6 +156,23 @@ def harvest_bundle(bundle, base, results, count_ref):
         if not item.is_file():
             continue
 
+        # macOS persistence: plists in LaunchAgents / LaunchDaemons / XPC paths
+        p = str(item).lower()
+        if item.suffix.lower() == ".plist" and ("launch" in p or "daemon" in p or "xpc" in p):
+            tick(f"    └─ {rel.name}")
+            entry = {
+                "file": str(item),
+                "analysis": {
+                    "target": item.name,
+                    "imports": [{"path": item.name, "binary": "plist", "imports": []}],
+                    "entropy": 0.0
+                }
+            }
+            entry["class"] = classify(entry)
+            results.append(entry)
+            count_ref[0] += 1
+            continue
+
         if item.stat().st_size > MAX_SIZE:
             continue
 
@@ -212,6 +234,8 @@ def build_reasoning(results):
                 codes.add("ELECTRON_PRELOAD_RCE")
             elif surf == "electron_helper":
                 codes.add("HELPER_BRIDGE")
+            elif surf == "macos_launch_persistence":
+                codes.add("MACOS_LAUNCH_PERSISTENCE")
 
         # Exploit tags may also directly correspond to expansion classes.
         for ex in exploits:
@@ -222,6 +246,7 @@ def build_reasoning(results):
                 "electron_asar_preload",
                 "electron_helper_ipc",
                 "ats_mitm_downgrade",
+                "MACOS_LAUNCH_PERSISTENCE",
             }:
                 codes.add(ex)
 
@@ -241,16 +266,39 @@ def build_reasoning(results):
 def run(target):
     base = Path(target)
     results = []
+    unmount_dmg = None
 
-    # -------- Single File Mode --------
-    if base.is_file():
+    # -------- DMG Mode: mount and run directory scan on contents --------
+    if base.is_file() and base.suffix.lower() == ".dmg":
+        tick(f"[DMG] {base.name}")
+        mount_dir = tempfile.mkdtemp(prefix="unveil_dmg_")
+        r = subprocess.run(
+            ["hdiutil", "attach", str(base), "-nobrowse", "-mountpoint", mount_dir],
+            capture_output=True,
+            text=True,
+        )
+        if r.returncode != 0 or not Path(mount_dir).is_dir():
+            shutil.rmtree(mount_dir, ignore_errors=True)
+            tick("[DMG] mount failed")
+            return {
+                "metadata": {"target": target},
+                "results": [],
+                "verdict": {"exploitability_band": "UNKNOWN", "missing_roles": ["ANCHOR", "BRIDGE", "BLADE"]},
+                "findings": [],
+                "surfaces": [],
+                "synth_indicators": [],
+            }
+        base = Path(mount_dir)
+        unmount_dmg = mount_dir
+
+    # -------- Single File Mode (non-DMG file) --------
+    if base.is_file() and not unmount_dmg:
         tick(f"[ANALYZE] {base.name}")
         entry = {
             "file": str(base),
             "analysis": analyze(str(base))
         }
         entry["class"] = classify(entry)
-        # Build synth from same shape as directory mode so report isn't duplicated
         surfaces_single = [{"surface": entry["class"], "path": entry["file"]}]
         synth = synthesize(surfaces_single)
         verdict = compile(synth, [], [])
@@ -259,12 +307,11 @@ def run(target):
             "results": [entry],
             "verdict": verdict,
             "findings": [],
-            # surfaces alias for renderer / HTML output
             "surfaces": [],
             "synth_indicators": synth
         }
 
-    # -------- Directory Mode --------
+    # -------- Directory Mode (or mounted DMG) --------
     tick(f"[SCAN] {target}")
     count_ref = [0]
 
@@ -287,12 +334,15 @@ def run(target):
     tick("[DONE]")
     findings, synth, verdict = build_reasoning(results)
 
+    if unmount_dmg:
+        subprocess.run(["hdiutil", "detach", unmount_dmg], capture_output=True)
+        shutil.rmtree(unmount_dmg, ignore_errors=True)
+
     return {
         "metadata": {"target": target},
         "results": results,
         "verdict": verdict,
         "findings": findings,
-        # expose normalized surfaces under a stable key for renderers
         "surfaces": findings,
         "synth_indicators": synth
     }

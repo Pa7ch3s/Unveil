@@ -3,8 +3,8 @@ requires = ["setuptools>=68","wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "unv"
-version = "0.4.1"
+name = "unveil"
+version = "0.5.0"
 requires-python = ">=3.9"
 dependencies = ["pygments", "lief","pefile","fastapi","uvicorn","python-multipart"]
 authors = [{name="Jerrod Baker"}]
@@ -13,11 +13,13 @@ readme = "README.md"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["unv*"]
+include = ["unveil*"]
+
+[tool.setuptools.package-data]
+unveil = ["assets/*"]
 
 [project.scripts]
-unv = "unv.cli:main"
-unveil = "unv.cli:main"
+unveil = "unveil.cli:main"
 
 [tool.setuptools]
 license-files = []
