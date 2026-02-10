@@ -10,12 +10,14 @@ def classify(entry):
 
     # ---------- SURFACE GENERATORS ----------
 
-    # Electron preload surface (BLADE)
+    # Electron preload / runtime presence (BLADE candidate)
+    # - direct preload.js
+    # - or binaries that link against the Electron framework binary
     if p.endswith("preload.js"):
         surfaces.append("electron_preload")
         exploits.append("ELECTRON_PRELOAD_RCE")
 
-    if any("@rpath/Electron" in i for i in imports):
+    if any("Electron" in i for i in imports):
         surfaces.append("electron_preload")
         exploits.append("ELECTRON_PRELOAD_RCE")
 

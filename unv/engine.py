@@ -175,7 +175,59 @@ def harvest_bundle(bundle, base, results, count_ref):
 # ------------------------------------------------------------
 
 def build_reasoning(results):
-    indicators = [{"class": r["class"], "file": r["file"]} for r in results]
+    """
+    Bridge classifier output into the reasoning layer.
+
+    `classifier` currently returns a dict:
+        {"surfaces": [...], "exploits": [...]}
+
+    The reasoning/expansion layer expects indicator records with a string
+    `class` field (e.g. "ELECTRON_PRELOAD_RCE", "QT_PLUGIN_RPATH_HIJACK").
+
+    Here we fan out one indicator per relevant surface / exploit tag so that
+    `expand` and `EXPLOIT_FAMILIES` can light up findings and synth indicators.
+    """
+    indicators = []
+
+    for r in results:
+        file_path = r.get("file")
+        cls_info = r.get("class")
+
+        # Backwards‑compat: old entries used a plain string class
+        if not isinstance(cls_info, dict):
+            if cls_info:
+                indicators.append({"class": cls_info, "file": file_path})
+            continue
+
+        surfaces = cls_info.get("surfaces", []) or []
+        exploits = cls_info.get("exploits", []) or []
+
+        codes = set()
+
+        # Map surface tags into indicator classes understood by `expand`.
+        for surf in surfaces:
+            if surf == "qt_rpath_plugin_drop":
+                codes.add("QT_PLUGIN_RPATH_HIJACK")
+            elif surf == "electron_preload":
+                codes.add("ELECTRON_PRELOAD_RCE")
+            elif surf == "electron_helper":
+                codes.add("HELPER_BRIDGE")
+
+        # Exploit tags may also directly correspond to expansion classes.
+        for ex in exploits:
+            if ex in {
+                "ELECTRON_PRELOAD_RCE",
+                "QT_PLUGIN_RPATH_HIJACK",
+                "HELPER_BRIDGE",
+                "electron_asar_preload",
+                "electron_helper_ipc",
+                "ats_mitm_downgrade",
+            }:
+                codes.add(ex)
+
+        for code in codes:
+            indicators.append({"class": code, "file": file_path})
+
     surfaces = expand(indicators, {})
     findings = normalize_surfaces(surfaces)
     synth = synthesize(surfaces)
@@ -207,6 +259,8 @@ def run(target):
             "results": [entry],
             "verdict": verdict,
             "findings": [],
+            # surfaces alias for renderer / HTML output
+            "surfaces": [],
             "synth_indicators": synth
         }
 
@@ -238,5 +292,7 @@ def run(target):
         "results": results,
         "verdict": verdict,
         "findings": findings,
+        # expose normalized surfaces under a stable key for renderers
+        "surfaces": findings,
         "synth_indicators": synth
     }
