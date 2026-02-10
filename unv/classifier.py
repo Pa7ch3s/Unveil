@@ -1,28 +1,42 @@
 from pathlib import Path
 
 def classify(entry):
-    p = entry.get("file","").lower()
-
-    # --- Upgrade 2 blade recognition ---
-    if p.endswith("preload.js"):
-        return "ELECTRON_PRELOAD_RCE"
-
+    p = entry.get("file", "").lower()
     imports = entry["analysis"]["imports"][0]["imports"]
-    tags = []
+    entropy = entry["analysis"].get("entropy", 0)
+
+    surfaces = []
+    exploits = []
+
+    # ---------- SURFACE GENERATORS ----------
+
+    # Electron preload surface (BLADE)
+    if p.endswith("preload.js"):
+        surfaces.append("electron_preload")
+        exploits.append("ELECTRON_PRELOAD_RCE")
 
     if any("@rpath/Electron" in i for i in imports):
-        tags.append("ELECTRON_PRELOAD_RCE")
+        surfaces.append("electron_preload")
+        exploits.append("ELECTRON_PRELOAD_RCE")
 
+    # Qt plugin rpath anchor (ANCHOR)
     if any("QtCore.framework" in i for i in imports):
-        tags.append("QT_PLUGIN_RPATH_HIJACK")
+        surfaces.append("qt_rpath_plugin_drop")
 
+    # Helper / crash bridge surface (BRIDGE)
     if "crashpad" in p or "helper" in p:
-        tags.append("HELPER_BRIDGE")
+        surfaces.append("electron_helper")
 
+    # Relative rpath pivot anchor
     if any(i.startswith("@executable_path") for i in imports):
-        tags.append("RELATIVE_RPATH_PIVOT")
+        surfaces.append("relative_rpath_pivot")
 
-    if entry["analysis"]["entropy"] > 6.9:
-        tags.append("PACKED_OR_PROTECTED")
+    # ---------- EXPLOIT ATTRIBUTES ----------
 
-    return ",".join(tags) if tags else "NATIVE"
+    if entropy > 6.9:
+        exploits.append("PACKED_OR_PROTECTED")
+
+    return {
+        "surfaces": list(set(surfaces)),
+        "exploits": list(set(exploits))
+    }

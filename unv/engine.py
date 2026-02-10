@@ -37,11 +37,13 @@ POWER_CHAIN = {
     "BLADE": ["BLADE"]
 }
 
-
 def tick(msg):
     sys.stderr.write(msg + "\n")
     sys.stderr.flush()
 
+# ------------------------------------------------------------
+# Phase 1 – Normalize Surface Buckets
+# ------------------------------------------------------------
 
 def normalize_surfaces(surfaces):
     buckets = {}
@@ -84,6 +86,7 @@ def normalize_surfaces(surfaces):
             b["evidence"].add(boundary)
 
     findings = []
+
     for b in buckets.values():
         density_conf = "LOW"
         if b["persistence"] and b["count"] >= 2:
@@ -100,33 +103,27 @@ def normalize_surfaces(surfaces):
 
     return findings
 
+# ------------------------------------------------------------
+# Phase 2 – Bundle Discovery
+# ------------------------------------------------------------
 
-def run(target):
-    base = Path(target)
-    results = []
+def discover_bundles(base):
+    bundles = []
+    for item in base.iterdir():
+        if item.is_dir() and item.suffix.lower() == ".app":
+            bundles.append(item)
+    return bundles
 
-    if base.is_file():
-        tick(f"[ANALYZE] {base.name}")
-        entry = {
-            "file": str(base),
-            "analysis": analyze(str(base))
-        }
-        entry["class"] = classify(entry)
-        verdict = compile([entry], [], {})
-        return {
-            "metadata": {"target": target},
-            "results": [entry],
-            "verdict": verdict,
-            "findings": [],
-            "synth_indicators": [entry]
-        }
+# ------------------------------------------------------------
+# Phase 3 – Recursive Harvest
+# ------------------------------------------------------------
 
-    count = 0
-    tick(f"[SCAN] {target}")
+def harvest_bundle(bundle, base, results, count_ref):
+    for item in bundle.rglob("*"):
+        if count_ref[0] >= MAX_FILES:
+            return
 
-    for item in base.rglob("*"):
-        if count >= MAX_FILES:
-            break
+        rel = item.relative_to(base)
 
         if item.is_symlink():
             continue
@@ -136,8 +133,9 @@ def run(target):
         if name in SKIP_DIRS:
             continue
 
-        # ---- UPGRADE 2: Promote preload.js into blade surface ----
+        # Preload blade promotion
         if name == "preload.js":
+            tick(f"    └─ {rel.name}")
             results.append({
                 "file": str(item),
                 "analysis": {
@@ -147,7 +145,7 @@ def run(target):
                 },
                 "class": "ELECTRON_PRELOAD_RCE"
             })
-            count += 1
+            count_ref[0] += 1
             continue
 
         if not item.is_file():
@@ -159,6 +157,8 @@ def run(target):
         if item.suffix.lower() not in VALID_SUFFIX:
             continue
 
+        tick(f"    └─ {rel.name}")
+
         try:
             entry = {
                 "file": str(item),
@@ -166,18 +166,72 @@ def run(target):
             }
             entry["class"] = classify(entry)
             results.append(entry)
-            count += 1
+            count_ref[0] += 1
         except:
             pass
 
-    tick("[DONE]")
+# ------------------------------------------------------------
+# Phase 4 – Reasoning Pipeline
+# ------------------------------------------------------------
 
+def build_reasoning(results):
     indicators = [{"class": r["class"], "file": r["file"]} for r in results]
     surfaces = expand(indicators, {})
-
     findings = normalize_surfaces(surfaces)
     synth = synthesize(surfaces)
     verdict = compile(synth, surfaces, findings)
+    return findings, synth, verdict
+
+# ------------------------------------------------------------
+# Phase 5 – Main Entry
+# ------------------------------------------------------------
+
+def run(target):
+    base = Path(target)
+    results = []
+
+    # -------- Single File Mode --------
+    if base.is_file():
+        tick(f"[ANALYZE] {base.name}")
+        entry = {
+            "file": str(base),
+            "analysis": analyze(str(base))
+        }
+        entry["class"] = classify(entry)
+        # Build synth from same shape as directory mode so report isn't duplicated
+        surfaces_single = [{"surface": entry["class"], "path": entry["file"]}]
+        synth = synthesize(surfaces_single)
+        verdict = compile(synth, [], [])
+        return {
+            "metadata": {"target": target},
+            "results": [entry],
+            "verdict": verdict,
+            "findings": [],
+            "synth_indicators": synth
+        }
+
+    # -------- Directory Mode --------
+    tick(f"[SCAN] {target}")
+    count_ref = [0]
+
+    bundles = discover_bundles(base)
+
+    # If the target itself is an .app bundle, treat it as a bundle root
+    # so `unveil -C /Applications/Foo.app` actually scans that bundle.
+    if not bundles and base.is_dir() and base.suffix.lower() == ".app":
+        bundles = [base]
+
+    for bundle in bundles:
+        if count_ref[0] >= MAX_FILES:
+            break
+
+        rel = bundle.relative_to(base)
+        tick(f"[APP] {rel}")
+        harvest_bundle(bundle, base, results, count_ref)
+
+    # -------- Reasoning --------
+    tick("[DONE]")
+    findings, synth, verdict = build_reasoning(results)
 
     return {
         "metadata": {"target": target},
