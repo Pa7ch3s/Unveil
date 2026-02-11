@@ -7,8 +7,6 @@
 ## Unveil
 
 Attack Path Discovery Engine
-
->*From binary to breach path.*
 ---
 **Opaque binaries in. Attack surfaces out.**
 ---
