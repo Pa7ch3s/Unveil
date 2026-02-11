@@ -91,11 +91,184 @@ unveil -h
 
 ---
 
+## Usage
+
+Step-by-step commands with full syntax. Add screenshots where applicable.
+
+### Version and help
+
+```bash
+unveil --version
+```
+Displays the installed version (e.g. `Unveil RADAR v0.5.0`).
+
+```bash
+unveil -h
+```
+Lists all flags: `-C` (target), `-e`, `-O`, `-f`, `-q`, `-xh`, `-xj`, `-xx`.
+
+---
+
+### Basic scan
+
+```bash
+unveil -C /path/to/target
+```
+- **Target:** Directory or `.app` bundle.
+- **Output:** Banner, Nmap-style summary (target, exploitability, killchain roles, frameworks, surface counts), then full JSON to stdout.
+
+**Examples:**
+
+```bash
+unveil -C /Applications/Safari.app
+unveil -C "C:\Program Files\MyApp"
+```
+
+---
+
+### Scan a single file
+
+```bash
+unveil -C /path/to/file.exe
+```
+Single file (e.g. `.exe`, `.dll`, `.so`, `.dylib`, `.js`). Output is JSON for that file only.
+
+```bash
+unveil -C ./suspicious.exe
+unveil -C /usr/lib/libfoo.so
+```
+
+---
+
+### Scan a DMG (macOS disk image)
+
+```bash
+unveil -C /path/to/image.dmg
+```
+Mounts the DMG, discovers `.app` bundles inside, runs the full radar, then unmounts.
+
+---
+
+### Scan an IPA (iOS app)
+
+```bash
+unveil -C /path/to/app.ipa
+```
+Unpacks the IPA, scans `Payload/*.app` like macOS bundles (Mach-O, plists), then cleans up.
+
+---
+
+### Scan an APK (Android app)
+
+```bash
+unveil -C /path/to/app.apk
+```
+Unpacks the APK, harvests and analyzes `lib/*/*.so` (ELF), then cleans up.
+
+---
+
+### Quiet mode
+
+```bash
+unveil -C /path/to/target -q
+```
+Suppresses the banner and human-readable summary; only raw JSON. Useful for piping or CI.
+
+---
+
+### Extended surface expansion
+
+```bash
+unveil -C /path/to/target -e
+```
+Enables deeper persistence and lateral surface expansion in the reasoning layer.
+
+---
+
+### Offensive surface synthesis
+
+```bash
+unveil -C /path/to/target -O
+```
+Enables exploit-chain modeling (offensive surface synthesis) in the report.
+
+---
+
+### Force unsigned / malformed binaries
+
+```bash
+unveil -C /path/to/target -f
+```
+Attempts analysis even when binaries are unsigned or malformed.
+
+---
+
+### Export to HTML
+
+```bash
+unveil -C /path/to/target -xh report.html
+```
+Writes a pretty-rendered HTML report to `report.html`.
+
+---
+
+### Export to JSON (indented)
+
 ```bash
 unveil -C /path/to/target -xj report.json
 ```
+Writes the full indented JSON report to `report.json`.
+
+---
+
+### Export to JSON (compact)
+
+```bash
+unveil -C /path/to/target -xx report.json
+```
+Writes the same report as single-line (compact) JSON.
+
+---
+
+### Quiet + export (CI / pipeline)
+
+```bash
+unveil -C /path/to/target -q -xj report.json
+```
+No banner, no summary; JSON is written to file. Good for scripts and CI.
+
+```bash
+unveil -C /path/to/target -q -xh report.html
+```
+Quiet run; only the HTML file is produced.
+
+---
+
+### Combined options
+
+```bash
+unveil -C /path/to/target -e -O -xj report.json
+```
+Extended expansion, offensive synthesis, and indented JSON export in one run.
+
+---
+
+### Flag reference
+
+| Flag | Description |
+|------|-------------|
+| `-C`, `--target` | **Required.** Path to directory, .app, file, .dmg, .ipa, or .apk. |
+| `-e` | Extended surface expansion. |
+| `-O` | Offensive surface synthesis (exploit-chain modeling). |
+| `-f` | Force analysis of unsigned/malformed binaries. |
+| `-q`, `--quiet` | Suppress banner and pretty summary. |
+| `-xh FILE` | Export HTML report to FILE. |
+| `-xj FILE` | Export indented JSON report to FILE. |
+| `-xx FILE` | Export compact JSON report to FILE. |
 
 > *All output is JSON. Designed to drop directly into pipelines, tooling, and reports.*
+
+Extended usage (same content): **[docs/USAGE.md](docs/USAGE.md)**.
 
 ---
 
