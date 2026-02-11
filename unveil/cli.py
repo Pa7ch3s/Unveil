@@ -1,8 +1,8 @@
 import argparse
 import json
 from pathlib import Path
-from unv.engine import run
-from unv.cli_printer import pretty
+from unveil.engine import run
+from unveil.cli_printer import pretty
 
 BANNER = Path(__file__).resolve().parent / "assets" / "banner.txt"
 
@@ -13,10 +13,11 @@ def main():
     p = argparse.ArgumentParser(
         prog="unveil",
         description="UNVEIL RADAR — Persistent Exploitability Surface Mapper",
-        formatter_class=argparse.RawTextHelpFormatter
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog="Disclaimer: This tool is for educational purposes and authorized security testing only. Unauthorized use against systems without prior written consent is strictly prohibited. The author accepts no liability for misuse or damage."
     )
 
-    p.add_argument("--version", action="version", version="UNVEIL RADAR v1.0.1")
+    p.add_argument("--version", action="version", version="Unveil RADAR v0.6.0")
 
     p.add_argument("-C", "--target", required=True,
                    help="Target directory or application bundle to analyze")
@@ -50,7 +51,7 @@ def main():
         pretty(report)
 
     if args.xh:
-        from unv.renderer import render
+        from unveil.renderer import render
         Path(args.xh).write_text(render(report))
 
     if args.xj:

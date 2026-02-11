@@ -1,5 +1,7 @@
 # Unveil — Usage
 
+**Disclaimer:** This tool is for educational purposes and authorized security testing only. Unauthorized use against systems without prior written consent is strictly prohibited. The author accepts no liability for misuse or damage.
+
 Step-by-step commands with full syntax. Add a screenshot below each example if desired.
 
 ---
