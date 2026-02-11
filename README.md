@@ -100,6 +100,7 @@ Displays the installed version (e.g. `Unveil RADAR v0.5.0`).
 unveil -h
 ```
 <img width="800" height="554" alt="image" src="https://github.com/user-attachments/assets/9cbd824f-a3b6-49ee-b782-aeee6faa208b" />
+
 Lists all flags: `-C` (target), `-e`, `-O`, `-f`, `-q`, `-xh`, `-xj`, `-xx`.
 
 ---
