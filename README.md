@@ -6,7 +6,6 @@
 
 ## Unveil
 
-Attack Path Discovery Engine
 ---
 **Opaque binaries in. Attack surfaces out.**
 ---
