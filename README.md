@@ -1,5 +1,9 @@
 <img width="600" height="376" alt="image" src="https://github.com/user-attachments/assets/7b4f0b20-d5f2-45f6-a0eb-18fb95bb653f" />
 
+[![Release](https://img.shields.io/github/v/release/Pa7ch3s/Unveil?include_prereleases&label=release)](https://github.com/Pa7ch3s/Unveil/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://github.com/Pa7ch3s/Unveil)
+
 ## Unveil
 
 Attack Path Discovery Engine
@@ -7,6 +11,8 @@ Attack Path Discovery Engine
 >*From binary to breach path.*
 ---
 **Opaque binaries in. Attack surfaces out.**
+---
+> **Disclaimer:** This tool is for educational purposes and authorized security testing only. Unauthorized use against systems without prior written consent is strictly prohibited. The author accepts no liability for misuse or damage.
 ---
 It focuses on **exploit viability**, not just indicators.
 
@@ -42,7 +48,7 @@ It focuses on **exploit viability**, not just indicators.
 
 ---
 
-## Recent features (v0.5.0)
+## Features (v0.6.0)
 
 * **Mobile (APK / IPA)** — Point at an `.apk` or `.ipa`; Unveil unpacks it, then runs the full radar on native libs (APK) or `.app` bundles (IPA).
 * **DMG support** — Pass a `.dmg` path; Unveil mounts it, discovers `.app` bundles, runs the full pipeline, then unmounts.
