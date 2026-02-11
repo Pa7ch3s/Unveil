@@ -64,6 +64,24 @@ def classify(entry):
     if p.endswith(".plist") and ("launch" in p or "daemon" in p):
         surfaces.append("macos_launch_persistence")
 
+    # Windows persistence (ANCHOR) – Run, Services, Scheduled Tasks, Startup, Winlogon, Scripts
+    if "tasks" in p or "scheduled" in p or "schedule" in p:
+        surfaces.append("windows_persistence")
+    if "startup" in p:
+        surfaces.append("windows_persistence")
+    if "run" in p or "runonce" in p:
+        surfaces.append("windows_persistence")
+    if "services" in p and ("windows" in p or "system32" in p or "config" in p):
+        surfaces.append("windows_persistence")
+    if "winlogon" in p:
+        surfaces.append("windows_persistence")
+    if "scripts" in p:
+        surfaces.append("windows_persistence")
+
+    # .NET / CLR managed assembly (ANCHOR) – deserialization, remoting, assembly load surfaces
+    if analysis.get("dotnet") is True:
+        surfaces.append("dotnet_managed")
+
     # ---------- EXPLOIT ATTRIBUTES ----------
 
     if entropy > 6.9:

@@ -76,4 +76,26 @@ def expand(indicators, enum):
                     "impact": "persistent_code_execution"
                 })
 
+        if c == "WINDOWS_PERSISTENCE":
+            path = i.get("file")
+            if path:
+                out.append({
+                    "surface": "windows_persistence",
+                    "path": path,
+                    "trust_boundary": "registry_or_tasks",
+                    "reentry": "run_or_task_xml",
+                    "impact": "persistent_code_execution"
+                })
+
+        if c == "DOTNET_MANAGED":
+            path = i.get("file")
+            if path:
+                out.append({
+                    "surface": "dotnet_managed",
+                    "path": path,
+                    "trust_boundary": "clr",
+                    "reentry": "deserialization_or_remoting",
+                    "impact": "persistent_code_execution"
+                })
+
     return out

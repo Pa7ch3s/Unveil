@@ -29,6 +29,10 @@ def _print_summary(report):
             frameworks.add("Qt")
         if "macos_launch" in cls or "launch_persistence" in cls:
             frameworks.add("macOS (launchd)")
+        if "windows_persistence" in cls:
+            frameworks.add("Windows (Run/Services/Tasks)")
+        if "dotnet_managed" in cls or "dotnet" in cls:
+            frameworks.add(".NET (CLR)")
 
     print(f"Target: {target}")
     print(f"Exploitability: {band} (chain completion {completion:.2f})")

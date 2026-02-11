@@ -1,5 +1,5 @@
-from unveil.chain_closure import detect_candidates
-from unveil.missing_link_engine import infer_missing_links
+from unv.chain_closure import detect_candidates
+from unv.missing_link_engine import infer_missing_links
 
 ROLE_ORDER = ["ANCHOR","BRIDGE","BLADE"]
 
