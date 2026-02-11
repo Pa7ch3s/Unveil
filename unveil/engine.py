@@ -8,6 +8,7 @@ import sys
 import tempfile
 import subprocess
 import shutil
+import zipfile
 
 MAX_FILES = 80
 MAX_SIZE = 120 * 1024 * 1024
@@ -20,12 +21,14 @@ SKIP_DIRS = {
     "Command Line Tools"
 }
 
-VALID_SUFFIX = {".exe", ".bin", ".dylib", ".so", ".js"}
+VALID_SUFFIX = {".exe", ".dll", ".bin", ".dylib", ".so", ".js"}
 
 SURFACE_POWER = {
     "qt_rpath_plugin_drop": "ANCHOR",
     "preload_write": "ANCHOR",
     "macos_launch_persistence": "ANCHOR",
+    "windows_persistence": "ANCHOR",
+    "dotnet_managed": "ANCHOR",
     "electron_helper": "BRIDGE",
     "electron_preload": "BLADE"
 }
@@ -119,9 +122,121 @@ def discover_bundles(base):
             bundles.append(item)
     return bundles
 
+
+def _unpack_zip(path, prefix=None):
+    """Unpack a .ipa or .apk (ZIP) to a temp dir. Returns (temp_dir_path, root_for_scan).
+    prefix: optional subdir to use as scan root (e.g. 'Payload' for IPA).
+    """
+    path = Path(path)
+    if not path.is_file() or path.suffix.lower() not in (".ipa", ".apk"):
+        return None, None
+    tmp = tempfile.mkdtemp(prefix="unveil_")
+    try:
+        with zipfile.ZipFile(path, "r") as z:
+            z.extractall(tmp)
+    except Exception:
+        shutil.rmtree(tmp, ignore_errors=True)
+        return None, None
+    root = Path(tmp)
+    if prefix and (root / prefix).is_dir():
+        root = root / prefix
+    return tmp, root
+
+
 # ------------------------------------------------------------
 # Phase 3 – Recursive Harvest
 # ------------------------------------------------------------
+
+def harvest_apk(unpacked_root, results, count_ref):
+    """Harvest native libs (lib/*/*.so) from an unpacked APK and run analyze/classify."""
+    lib_dir = Path(unpacked_root) / "lib"
+    if not lib_dir.is_dir():
+        return
+    for item in lib_dir.rglob("*.so"):
+        if count_ref[0] >= MAX_FILES:
+            return
+        if not item.is_file() or item.stat().st_size > MAX_SIZE:
+            continue
+        tick(f"    └─ {item.relative_to(unpacked_root)}")
+        try:
+            entry = {
+                "file": str(item),
+                "analysis": analyze(str(item))
+            }
+            entry["class"] = classify(entry)
+            results.append(entry)
+            count_ref[0] += 1
+        except Exception:
+            pass
+
+
+# Windows persistence: Scheduled Tasks (.xml), Startup folder, Run/Scripts (.vbs, .bat, .ps1, .cmd)
+WINDOWS_PERSISTENCE_EXTS = {".xml", ".vbs", ".bat", ".ps1", ".cmd", ".lnk"}
+WINDOWS_PERSISTENCE_PATH_PARTS = ("tasks", "scheduled", "schedule", "startup", "run", "runonce", "winlogon", "scripts", "services")
+
+
+def harvest_directory_binaries(base, results, count_ref):
+    """When there are no .app bundles (e.g. Windows app dir), harvest .exe/.dll/.so/etc. from the tree."""
+    base = Path(base)
+    if not base.is_dir():
+        return
+    for item in base.rglob("*"):
+        if count_ref[0] >= MAX_FILES:
+            return
+        if item.is_symlink() or not item.is_file():
+            continue
+        if any(skip.lower() in (p.lower() for p in item.parts) for skip in SKIP_DIRS):
+            continue
+        if item.stat().st_size > MAX_SIZE:
+            continue
+        if item.suffix.lower() not in VALID_SUFFIX:
+            continue
+        tick(f"    └─ {item.relative_to(base)}")
+        try:
+            entry = {
+                "file": str(item),
+                "analysis": analyze(str(item))
+            }
+            entry["class"] = classify(entry)
+            results.append(entry)
+            count_ref[0] += 1
+        except Exception:
+            pass
+
+
+def harvest_windows_persistence(base, results, count_ref):
+    """Harvest Windows persistence artifacts (Tasks XML, Startup, Run/Scripts) from a directory."""
+    base = Path(base)
+    if not base.is_dir():
+        return
+    for item in base.rglob("*"):
+        if count_ref[0] >= MAX_FILES:
+            return
+        if not item.is_file():
+            continue
+        p = str(item).lower()
+        ext = item.suffix.lower()
+        # Scheduled Task XML
+        if ext == ".xml" and ("task" in p or "schedule" in p):
+            pass
+        elif ext in WINDOWS_PERSISTENCE_EXTS and any(part in p for part in WINDOWS_PERSISTENCE_PATH_PARTS):
+            pass
+        else:
+            continue
+        tick(f"    └─ {item.relative_to(base)}")
+        entry = {
+            "file": str(item),
+            "analysis": {
+                "target": item.name,
+                "imports": [{"path": item.name, "binary": "config", "imports": []}],
+                "entropy": 0.0
+            }
+        }
+        entry["class"] = classify(entry)
+        if "windows_persistence" in (entry["class"].get("surfaces") or []):
+            results.append(entry)
+            count_ref[0] += 1
+
 
 def harvest_bundle(bundle, base, results, count_ref):
     for item in bundle.rglob("*"):
@@ -156,22 +271,25 @@ def harvest_bundle(bundle, base, results, count_ref):
         if not item.is_file():
             continue
 
-        # macOS persistence: plists in LaunchAgents / LaunchDaemons / XPC paths
+        # macOS persistence: only real definitions (LaunchAgents/LaunchDaemons/Login Items, or XPC Info.plist)
         p = str(item).lower()
-        if item.suffix.lower() == ".plist" and ("launch" in p or "daemon" in p or "xpc" in p):
-            tick(f"    └─ {rel.name}")
-            entry = {
-                "file": str(item),
-                "analysis": {
-                    "target": item.name,
-                    "imports": [{"path": item.name, "binary": "plist", "imports": []}],
-                    "entropy": 0.0
+        if item.suffix.lower() == ".plist":
+            is_launch_daemon = "launchagents" in p or "launchdaemons" in p or "loginitems" in p or "login items" in p
+            is_xpc_info = (".xpc" in p or "xpcservice" in p) and item.name == "Info.plist"
+            if is_launch_daemon or is_xpc_info:
+                tick(f"    └─ {rel.name}")
+                entry = {
+                    "file": str(item),
+                    "analysis": {
+                        "target": item.name,
+                        "imports": [{"path": item.name, "binary": "plist", "imports": []}],
+                        "entropy": 0.0
+                    }
                 }
-            }
-            entry["class"] = classify(entry)
-            results.append(entry)
-            count_ref[0] += 1
-            continue
+                entry["class"] = classify(entry)
+                results.append(entry)
+                count_ref[0] += 1
+                continue
 
         if item.stat().st_size > MAX_SIZE:
             continue
@@ -236,6 +354,10 @@ def build_reasoning(results):
                 codes.add("HELPER_BRIDGE")
             elif surf == "macos_launch_persistence":
                 codes.add("MACOS_LAUNCH_PERSISTENCE")
+            elif surf == "windows_persistence":
+                codes.add("WINDOWS_PERSISTENCE")
+            elif surf == "dotnet_managed":
+                codes.add("DOTNET_MANAGED")
 
         # Exploit tags may also directly correspond to expansion classes.
         for ex in exploits:
@@ -247,6 +369,8 @@ def build_reasoning(results):
                 "electron_helper_ipc",
                 "ats_mitm_downgrade",
                 "MACOS_LAUNCH_PERSISTENCE",
+                "WINDOWS_PERSISTENCE",
+                "DOTNET_MANAGED",
             }:
                 codes.add(ex)
 
@@ -291,6 +415,57 @@ def run(target):
         base = Path(mount_dir)
         unmount_dmg = mount_dir
 
+    unpack_dir = None
+
+    # -------- IPA Mode: unpack and run .app bundle scan on Payload/ --------
+    if base.is_file() and base.suffix.lower() == ".ipa" and not unmount_dmg:
+        tick(f"[IPA] {base.name}")
+        tmp, root = _unpack_zip(base, "Payload")
+        if root is None or not root.is_dir():
+            tick("[IPA] unpack failed")
+            return {
+                "metadata": {"target": target},
+                "results": [],
+                "verdict": {"exploitability_band": "UNKNOWN", "missing_roles": ["ANCHOR", "BRIDGE", "BLADE"]},
+                "findings": [],
+                "surfaces": [],
+                "synth_indicators": [],
+            }
+        base = root
+        unpack_dir = tmp
+
+    # -------- APK Mode: unpack and harvest lib/*.so --------
+    if base.is_file() and base.suffix.lower() == ".apk" and not unmount_dmg:
+        tick(f"[APK] {base.name}")
+        tmp, root = _unpack_zip(base, None)
+        if root is None or not root.is_dir():
+            tick("[APK] unpack failed")
+            return {
+                "metadata": {"target": target},
+                "results": [],
+                "verdict": {"exploitability_band": "UNKNOWN", "missing_roles": ["ANCHOR", "BRIDGE", "BLADE"]},
+                "findings": [],
+                "surfaces": [],
+                "synth_indicators": [],
+            }
+        base = root
+        unpack_dir = tmp
+        tick(f"[SCAN] {target}")
+        count_ref = [0]
+        harvest_apk(base, results, count_ref)
+        tick("[DONE]")
+        findings, synth, verdict = build_reasoning(results)
+        if unpack_dir:
+            shutil.rmtree(unpack_dir, ignore_errors=True)
+        return {
+            "metadata": {"target": target},
+            "results": results,
+            "verdict": verdict,
+            "findings": findings,
+            "surfaces": findings,
+            "synth_indicators": synth,
+        }
+
     # -------- Single File Mode (non-DMG file) --------
     if base.is_file() and not unmount_dmg:
         tick(f"[ANALYZE] {base.name}")
@@ -330,6 +505,13 @@ def run(target):
         tick(f"[APP] {rel}")
         harvest_bundle(bundle, base, results, count_ref)
 
+    # No .app bundles (e.g. Windows app dir): harvest .exe/.dll/.so etc. from the tree
+    if not bundles:
+        harvest_directory_binaries(base, results, count_ref)
+
+    # Windows persistence: harvest Tasks/Startup/Run/Scripts artifacts when scanning a directory
+    harvest_windows_persistence(base, results, count_ref)
+
     # -------- Reasoning --------
     tick("[DONE]")
     findings, synth, verdict = build_reasoning(results)
@@ -337,6 +519,8 @@ def run(target):
     if unmount_dmg:
         subprocess.run(["hdiutil", "detach", unmount_dmg], capture_output=True)
         shutil.rmtree(unmount_dmg, ignore_errors=True)
+    if unpack_dir:
+        shutil.rmtree(unpack_dir, ignore_errors=True)
 
     return {
         "metadata": {"target": target},

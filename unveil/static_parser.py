@@ -71,6 +71,23 @@ def _collect_pe_imports(path):
     return sorted(imports)
 
 
+def _is_dotnet_assembly(path):
+    """True if the PE has a CLR (COM descriptor) directory – i.e. a .NET assembly."""
+    if not pefile or not _is_pe(path):
+        return False
+    try:
+        pe = pefile.PE(path)
+        if not hasattr(pe, "OPTIONAL_HEADER") or not hasattr(pe.OPTIONAL_HEADER, "DATA_DIRECTORY"):
+            return False
+        dd = pe.OPTIONAL_HEADER.DATA_DIRECTORY
+        if len(dd) <= 14:
+            return False
+        com = dd[14]  # IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR
+        return (com.VirtualAddress != 0 and com.Size != 0)
+    except Exception:
+        return False
+
+
 def _inspect_binary(path):
     if _is_macho(path):
         return {
@@ -196,6 +213,12 @@ def analyze(target):
         result["entropy"] = entropy(target)
     except Exception:
         result["entropy"] = None
+
+    # Tag .NET / CLR assemblies for the managed-code pack
+    try:
+        result["dotnet"] = _is_dotnet_assembly(target)
+    except Exception:
+        result["dotnet"] = False
 
     return result
 

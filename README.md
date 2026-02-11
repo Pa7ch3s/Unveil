@@ -15,7 +15,7 @@ It focuses on **exploit viability**, not just indicators.
 > * Import and symbol inspection
 > * Entropy analysis (packed / protected detection)
 > * String harvesting
-> * Manifest parsing (APK / IPA — *planned*)
+> * Manifest parsing (APK permissions/components — *optional*, native scan included)
 > * Structured, JSON-first output
 
 ---
@@ -35,16 +35,22 @@ It focuses on **exploit viability**, not just indicators.
 | **Electron / ASAR** (app.asar, preload, helpers) | ✅ |
 | **Qt** (plugins, rpath, qt.conf) | ✅ |
 | **macOS persistence** (LaunchAgents, LaunchDaemons, XPC, plists) | ✅ |
-| **APK / IPA** | 🔜 Planned (unpack + manifest not yet implemented) |
+| **Windows persistence** (Run/Services, Scheduled Tasks, Startup, Winlogon, Scripts) | ✅ Directory scan for .xml, .vbs, .bat, .ps1, .cmd in those paths |
+| **.NET / CLR** (managed assemblies) | ✅ PE with CLR descriptor detected; deserialization, remoting, assembly-load surfaces (ANCHOR) |
+| **APK** (Android) | ✅ Unpacked; native `lib/*.so` harvested and analyzed (ELF) |
+| **IPA** (iOS) | ✅ Unpacked; `Payload/*.app` scanned like macOS bundles (Mach-O, plists) |
 
 ---
 
 ## Recent features (v0.5.0)
 
+* **Mobile (APK / IPA)** — Point at an `.apk` or `.ipa`; Unveil unpacks it, then runs the full radar on native libs (APK) or `.app` bundles (IPA).
 * **DMG support** — Pass a `.dmg` path; Unveil mounts it, discovers `.app` bundles, runs the full pipeline, then unmounts.
 * **Electron pack** — Preload/ASAR write surfaces, helper/IPC/crashpad bridges, ANCHOR/BRIDGE classification.
 * **Qt pack** — Qt plugin rpath hijack (ANCHOR), qt.conf and plugin path detection.
 * **macOS persistence pack** — LaunchAgents, LaunchDaemons, Login Items, XPC; plists in those paths are harvested and tagged.
+* **Windows persistence pack** — Run/RunOnce, Services, Scheduled Tasks, Startup, Winlogon, Scripts; `.xml`, `.vbs`, `.bat`, `.ps1`, `.cmd` in those paths are harvested and tagged (ANCHOR).
+* **.NET pack** — PE files with a CLR (COM descriptor) directory are tagged as managed assemblies; deserialization, remoting, and assembly-load surfaces with CWE/CVE-style intel (ANCHOR).
 * **Nmap-style summary** — Target, exploitability band, killchain roles, frameworks, and surface counts before the full JSON.
 
 ---
@@ -55,15 +61,23 @@ It focuses on **exploit viability**, not just indicators.
 pipx install git+https://github.com/Pa7ch3s/Unveil.git
 ```
 
-**Upgrading from `unv`:** The CLI was renamed to `unveil`. If you still see `unv` or `unv-daemon` when you tab-complete, remove the old scripts and reinstall:
+**Upgrading from `unv`:** The CLI was renamed to `unveil`. If you still see `unv` or `unv-daemon` when you tab-complete:
+
+1. Find and remove the old executables (pipx uses `~/.local/bin`; a user Python install often uses `~/Library/Python/3.9/bin` on macOS):
 
 ```bash
-pipx uninstall unv 2>/dev/null; pipx uninstall unveil 2>/dev/null
+which unv unv-daemon
 rm -f ~/.local/bin/unv ~/.local/bin/unv-daemon
-pipx install git+https://github.com/Pa7ch3s/Unveil.git
+rm -f ~/Library/Python/3.9/bin/unv ~/Library/Python/3.9/bin/unv-daemon
 ```
 
-If the binaries live elsewhere, find them with `which unv` and `which unv-daemon`, then delete those paths. Open a new terminal (or run `hash -r`) so completions refresh.
+2. Clear your shell’s command cache so tab-completion updates:
+
+```bash
+hash -r
+```
+
+3. Use a new terminal window, or run `unv` then Tab again — only `unveil` (and any other `unv*` tools you have) should appear.
 
 ---
 

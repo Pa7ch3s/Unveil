@@ -1,36 +1,22 @@
 import argparse
 import json
 from pathlib import Path
-from unveil.engine import run
-from unveil.cli_printer import pretty
+from unv.engine import run
+from unv.cli_printer import pretty
 
-FALLBACK_BANNER = """88        88                                    88 88
-88        88                                    "" 88
-88        88                                       88
-88        88 8b,dPPYba,  8b       d8  ,adPPYba, 88 88
-88        88 88P'   `"8a `8b     d8' a8P_____88 88 88
-88        88 88       88  `8b   d8'  8PP""""""" 88 88
-Y8a.    .a8P 88       88   `8b,d8'   "8b,   ,aa 88 88
- `"Y8888Y"'  88       88     "8"      `"Ybbd8"' 88 88
-
-                 UNVEIL — RADAR v0.5.0
-"""
-
-def _banner():
-    try:
-        from importlib.resources import read_text
-        return read_text("unveil", "assets/banner.txt")
-    except Exception:
-        return FALLBACK_BANNER
+BANNER = Path(__file__).resolve().parent / "assets" / "banner.txt"
 
 def main():
+    if BANNER.exists():
+        print(BANNER.read_text())
+
     p = argparse.ArgumentParser(
         prog="unveil",
         description="UNVEIL RADAR — Persistent Exploitability Surface Mapper",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
-    p.add_argument("--version", action="version", version="Unveil RADAR v0.5.0")
+    p.add_argument("--version", action="version", version="UNVEIL RADAR v1.0.1")
 
     p.add_argument("-C", "--target", required=True,
                    help="Target directory or application bundle to analyze")
@@ -58,16 +44,13 @@ def main():
 
     args = p.parse_args()
 
-    if not args.quiet:
-        print(_banner())
-
     report = run(args.target)
 
     if not args.quiet:
         pretty(report)
 
     if args.xh:
-        from unveil.renderer import render
+        from unv.renderer import render
         Path(args.xh).write_text(render(report))
 
     if args.xj:
