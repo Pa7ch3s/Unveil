@@ -87,16 +87,6 @@ hash -r
 
 ---
 
-Verify/display version and flags:
-
-```bash
-unveil --version
-unveil -h
-```
-<img width="800" height="554" alt="image" src="https://github.com/user-attachments/assets/9cbd824f-a3b6-49ee-b782-aeee6faa208b" />
-
----
-
 ## Usage
 
 Step-by-step commands with full syntax. Add screenshots where applicable.
@@ -106,11 +96,14 @@ Step-by-step commands with full syntax. Add screenshots where applicable.
 ```bash
 unveil --version
 ```
+<img width="551" height="239" alt="image" src="https://github.com/user-attachments/assets/6c66f271-e46f-4f94-a5c8-d20e8e4c617e" />
+
 Displays the installed version (e.g. `Unveil RADAR v0.5.0`).
 
 ```bash
 unveil -h
 ```
+<img width="800" height="554" alt="image" src="https://github.com/user-attachments/assets/9cbd824f-a3b6-49ee-b782-aeee6faa208b" />
 Lists all flags: `-C` (target), `-e`, `-O`, `-f`, `-q`, `-xh`, `-xj`, `-xx`.
 
 ---
