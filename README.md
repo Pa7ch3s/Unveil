@@ -6,7 +6,6 @@
 
 ## Unveil
 
----
 **Opaque binaries in. Attack surfaces out.**
 ---
 > **Disclaimer:** This tool is for educational purposes and authorized security testing only. Unauthorized use against systems without prior written consent is strictly prohibited. The author accepts no liability for misuse or damage.
