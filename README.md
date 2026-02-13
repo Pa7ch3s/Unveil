@@ -6,6 +6,10 @@
 
 ## Unveil
 
+Attack Path Discovery Engine
+
+>*From binary to breach path.*
+---
 **Opaque binaries in. Attack surfaces out.**
 ---
 > **Disclaimer:** This tool is for educational purposes and authorized security testing only. Unauthorized use against systems without prior written consent is strictly prohibited. The author accepts no liability for misuse or damage.
@@ -87,6 +91,16 @@ hash -r
 
 ---
 
+Verify/display version and flags:
+
+```bash
+unveil --version
+unveil -h
+```
+<img width="800" height="554" alt="image" src="https://github.com/user-attachments/assets/9cbd824f-a3b6-49ee-b782-aeee6faa208b" />
+
+---
+
 ## Usage
 
 Step-by-step commands with full syntax. Add screenshots where applicable.
@@ -96,15 +110,11 @@ Step-by-step commands with full syntax. Add screenshots where applicable.
 ```bash
 unveil --version
 ```
-<img width="551" height="239" alt="image" src="https://github.com/user-attachments/assets/6c66f271-e46f-4f94-a5c8-d20e8e4c617e" />
-
-Displays the installed version (e.g. `Unveil RADAR v0.5.0`).
+Displays the installed version (e.g. `Unveil RADAR v0.6.0`).
 
 ```bash
 unveil -h
 ```
-<img width="800" height="554" alt="image" src="https://github.com/user-attachments/assets/9cbd824f-a3b6-49ee-b782-aeee6faa208b" />
-
 Lists all flags: `-C` (target), `-e`, `-O`, `-f`, `-q`, `-xh`, `-xj`, `-xx`.
 
 ---
@@ -208,7 +218,7 @@ Attempts analysis even when binaries are unsigned or malformed.
 ```bash
 unveil -C /path/to/target -xh report.html
 ```
-Writes a pretty-rendered HTML report to `report.html`.
+Writes a pretty-rendered HTML report to `report.html`. The report lists **discovered .html/.htm** files inside the target with clickable `file://` links so you can open them in a browser for attacks, redev, or transparency. Sections are collapsible.
 
 ---
 

@@ -16,6 +16,7 @@ import javax.swing.table.TableRowSorter;
 import javax.swing.RowFilter;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
+import java.awt.Desktop;
 import java.awt.event.ActionEvent;
 import java.io.File;
 import java.io.IOException;
@@ -50,6 +51,8 @@ public class UnveilTab {
     private final JLabel versionLabel;
     private final JButton exportHtmlBtn;
     private final JTextField huntPlanFilterField;
+    private final DefaultListModel<String> discoveredHtmlModel = new DefaultListModel<>();
+    private final JList<String> discoveredHtmlList;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private static final int RECENT_TARGETS_MAX = 5;
     private final List<String> recentTargets = new ArrayList<>();
@@ -164,7 +167,61 @@ public class UnveilTab {
         huntPlanToolbar.add(huntPlanFilterField);
         huntPlanPanel.add(huntPlanToolbar, BorderLayout.NORTH);
         huntPlanPanel.add(new JScrollPane(huntPlanTable), BorderLayout.CENTER);
+        JPopupMenu huntPlanMenu = new JPopupMenu();
+        JMenuItem copyCellItem = new JMenuItem("Copy cell");
+        copyCellItem.addActionListener(e -> copyHuntPlanCell());
+        huntPlanMenu.add(copyCellItem);
+        JMenuItem copyRowItem = new JMenuItem("Copy row (tab-separated)");
+        copyRowItem.addActionListener(e -> copyHuntPlanRow());
+        huntPlanMenu.add(copyRowItem);
+        JMenuItem copySurfaceItem = new JMenuItem("Copy suggested surface");
+        copySurfaceItem.addActionListener(e -> copyHuntPlanSuggestedSurface());
+        huntPlanMenu.add(copySurfaceItem);
+        huntPlanTable.setComponentPopupMenu(huntPlanMenu);
         resultsTabs.addTab("Hunt plan", huntPlanPanel);
+
+        JPanel discoveredHtmlPanel = new JPanel(new BorderLayout(4, 4));
+        this.discoveredHtmlList = new JList<>(discoveredHtmlModel);
+        discoveredHtmlList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        discoveredHtmlPanel.add(new JScrollPane(discoveredHtmlList), BorderLayout.CENTER);
+        JPanel discoveredHtmlToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        discoveredHtmlToolbar.add(new JLabel("HTML files found inside the target — open for attacks, redev, or transparency."));
+        JButton openHtmlBtn = new JButton("Open in browser");
+        openHtmlBtn.addActionListener(e -> openSelectedHtml());
+        discoveredHtmlToolbar.add(openHtmlBtn);
+        JButton copyPathBtn = new JButton("Copy path");
+        copyPathBtn.addActionListener(e -> copySelectedHtmlPath());
+        discoveredHtmlToolbar.add(copyPathBtn);
+        JButton copyFileUrlBtn = new JButton("Copy file:// URL");
+        copyFileUrlBtn.addActionListener(e -> copySelectedHtmlFileUrl());
+        discoveredHtmlToolbar.add(copyFileUrlBtn);
+        JButton exportListBtn = new JButton("Export list…");
+        exportListBtn.addActionListener(e -> exportDiscoveredHtmlList());
+        discoveredHtmlToolbar.add(exportListBtn);
+        discoveredHtmlPanel.add(discoveredHtmlToolbar, BorderLayout.NORTH);
+        discoveredHtmlList.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (e.getClickCount() == 2) openSelectedHtml();
+            }
+        });
+        JPopupMenu discoveredHtmlMenu = new JPopupMenu();
+        JMenuItem openItem = new JMenuItem("Open in browser");
+        openItem.addActionListener(e -> openSelectedHtml());
+        discoveredHtmlMenu.add(openItem);
+        discoveredHtmlMenu.addSeparator();
+        JMenuItem copyPathItem = new JMenuItem("Copy path");
+        copyPathItem.addActionListener(e -> copySelectedHtmlPath());
+        discoveredHtmlMenu.add(copyPathItem);
+        JMenuItem copyUrlItem = new JMenuItem("Copy file:// URL");
+        copyUrlItem.addActionListener(e -> copySelectedHtmlFileUrl());
+        discoveredHtmlMenu.add(copyUrlItem);
+        discoveredHtmlMenu.addSeparator();
+        JMenuItem exportListItem = new JMenuItem("Export list to file…");
+        exportListItem.addActionListener(e -> exportDiscoveredHtmlList());
+        discoveredHtmlMenu.add(exportListItem);
+        discoveredHtmlList.setComponentPopupMenu(discoveredHtmlMenu);
+        resultsTabs.addTab("Discovered HTML", discoveredHtmlPanel);
 
         this.rawJsonArea = new JTextArea(18, 80);
         rawJsonArea.setEditable(false);
@@ -498,6 +555,16 @@ public class UnveilTab {
                 }
             }
             huntPlanFilterField.setText("");
+
+            discoveredHtmlModel.clear();
+            if (report.has("discovered_html")) {
+                JsonArray arr = report.getAsJsonArray("discovered_html");
+                if (arr != null) {
+                    for (JsonElement el : arr) {
+                        if (el.isJsonPrimitive()) discoveredHtmlModel.addElement(el.getAsString());
+                    }
+                }
+            }
         } catch (Exception e) {
             logging.logToError("Unveil report parse error: " + e.getMessage());
             summaryArea.setText("Report received but parsing failed.\n\nSee Raw JSON tab.\n\n" + e.getMessage());
@@ -508,6 +575,107 @@ public class UnveilTab {
         if (el == null || el.isJsonNull()) return "";
         if (el.isJsonPrimitive()) return el.getAsString();
         return el.toString();
+    }
+
+    private void openSelectedHtml() {
+        String path = discoveredHtmlList.getSelectedValue();
+        if (path == null || path.isEmpty()) return;
+        try {
+            File f = new File(path);
+            if (f.exists() && Desktop.isDesktopSupported()) {
+                Desktop.getDesktop().open(f);
+                statusLabel.setText("Opened in default app.");
+            } else {
+                statusLabel.setText("Open not supported or file missing.");
+            }
+        } catch (Exception ex) {
+            statusLabel.setText("Open failed.");
+            logging.logToError("Open HTML failed: " + ex.getMessage());
+        }
+    }
+
+    private void copySelectedHtmlPath() {
+        String path = discoveredHtmlList.getSelectedValue();
+        if (path == null || path.isEmpty()) return;
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(path), null);
+        statusLabel.setText("Path copied.");
+    }
+
+    private static String pathToFileUrl(String path) {
+        if (path == null) return "";
+        String p = path.replace("\\", "/");
+        if (p.length() >= 2 && p.charAt(1) == ':')
+            return "file:///" + p;
+        if (!p.startsWith("/")) p = "/" + p;
+        return "file://" + p;
+    }
+
+    private void copySelectedHtmlFileUrl() {
+        String path = discoveredHtmlList.getSelectedValue();
+        if (path == null || path.isEmpty()) return;
+        String url = pathToFileUrl(path);
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(url), null);
+        statusLabel.setText("file:// URL copied.");
+    }
+
+    private void copyHuntPlanCell() {
+        int row = huntPlanTable.getSelectedRow();
+        int col = huntPlanTable.getSelectedColumn();
+        if (row < 0 || col < 0) return;
+        int modelRow = huntPlanTable.convertRowIndexToModel(row);
+        Object v = huntPlanModel.getValueAt(modelRow, col);
+        if (v != null) {
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(v.toString()), null);
+            statusLabel.setText("Cell copied.");
+        }
+    }
+
+    private void copyHuntPlanRow() {
+        int row = huntPlanTable.getSelectedRow();
+        if (row < 0) return;
+        int modelRow = huntPlanTable.convertRowIndexToModel(row);
+        StringBuilder sb = new StringBuilder();
+        for (int c = 0; c < huntPlanModel.getColumnCount(); c++) {
+            if (c > 0) sb.append("\t");
+            Object v = huntPlanModel.getValueAt(modelRow, c);
+            sb.append(v != null ? v.toString() : "");
+        }
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(sb.toString()), null);
+        statusLabel.setText("Row copied.");
+    }
+
+    private void exportDiscoveredHtmlList() {
+        if (discoveredHtmlModel.isEmpty()) {
+            statusLabel.setText("No paths to export.");
+            return;
+        }
+        JFileChooser chooser = new JFileChooser();
+        chooser.setSelectedFile(new File("unveil-discovered-html.txt"));
+        if (chooser.showSaveDialog(mainPanel) != JFileChooser.APPROVE_OPTION) return;
+        File f = chooser.getSelectedFile();
+        if (f == null) return;
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < discoveredHtmlModel.getSize(); i++) {
+                sb.append(discoveredHtmlModel.getElementAt(i)).append("\n");
+            }
+            Files.writeString(f.toPath(), sb.toString(), StandardCharsets.UTF_8);
+            statusLabel.setText("Exported: " + f.getAbsolutePath());
+        } catch (IOException ex) {
+            statusLabel.setText("Export failed.");
+            JOptionPane.showMessageDialog(mainPanel, "Could not save: " + ex.getMessage(), "Export error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void copyHuntPlanSuggestedSurface() {
+        int row = huntPlanTable.getSelectedRow();
+        if (row < 0) return;
+        int modelRow = huntPlanTable.convertRowIndexToModel(row);
+        Object v = huntPlanModel.getValueAt(modelRow, 1); // Suggested surface column
+        if (v != null) {
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(v.toString()), null);
+            statusLabel.setText("Suggested surface copied.");
+        }
     }
 
     private void copyRawJson() {

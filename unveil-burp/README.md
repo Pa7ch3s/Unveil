@@ -11,7 +11,8 @@ Adds an **Unveil** tab to Burp Suite: scan apps/binaries for attack surfaces, se
 - **Results** — **Summary** (verdict, exploitability band, missing roles), **Hunt plan** (table), **Raw JSON**.
 - **Copy JSON** / **Save JSON…** / **Save compact JSON…** / **Export HTML…** — Copy, save indented or compact JSON, or export HTML via `unveil -xh`. Buttons are no-ops when there is no report; Export HTML is disabled while exporting.
 - **Rescan last** — Re-run the last successful scan target without re-entering the path.
-- **Hunt plan** — Table is sortable by column; **Filter** field filters rows by text in any column (cleared when a new report is loaded).
+- **Hunt plan** — Table is sortable by column; **Filter** field filters rows by text in any column (cleared when a new report is loaded). **Right-click:** Copy cell, Copy row (tab-separated), Copy suggested surface.
+- **Discovered HTML** — Lists .html/.htm files found inside the target (all scan types: directory, .app, .dmg, .ipa, .apk, single file). **Open in browser**, **Copy path**, **Copy file:// URL**, **Export list…** (save paths to a file). **Double-click** a row to open; **right-click** for the same actions.
 
 ## Unveil CLI ↔ UI mapping
 
@@ -27,7 +28,7 @@ Adds an **Unveil** tab to Burp Suite: scan apps/binaries for attack surfaces, se
 | `-xh FILE` | **Export HTML…** runs `unveil -q -xh <file>` |
 | `--version` | **Unveil CLI:** label (fetched on load) |
 
-All scan target types (directory, .app, single file, .dmg, .ipa, .apk) are supported via the same **Path** field.
+All scan target types (directory, .app, single file, .dmg, .ipa, .apk) are supported via the same **Path** field. **Discovered HTML** is populated for every mode (bundles, APK unpack, IPA unpack, DMG mount, and single .html/.htm file).
 
 ## Build
 
@@ -38,13 +39,13 @@ cd unveil-burp
 ./gradlew jar
 ```
 
-The JAR is written to `build/libs/unveil-burp-0.1.0.jar`.
+The JAR is written to `build/libs/unveil-burp-0.2.0.jar`.
 
 ## Load in Burp
 
 1. Open Burp Suite (2023.8+ for Montoya API).
 2. **Extensions** → **Installed** → **Add** → **Extension type: Java**.
-3. Select `build/libs/unveil-burp-0.1.0.jar`.
+3. Select `build/libs/unveil-burp-0.2.0.jar`.
 4. The **Unveil** tab appears; if scan fails with “unveil not found”, set **Unveil executable (optional)** to the path from `which unveil`.
 
 ## Compressing the JSON output
