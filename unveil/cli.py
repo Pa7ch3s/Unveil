@@ -4,11 +4,18 @@ from pathlib import Path
 from unveil.engine import run
 from unveil.cli_printer import pretty
 
+try:
+    from importlib.metadata import version as _pkg_version
+    VERSION = _pkg_version("unveil")
+except Exception:
+    VERSION = "0.7.0"
+
 BANNER = Path(__file__).resolve().parent / "assets" / "banner.txt"
 
 def main():
     if BANNER.exists():
         print(BANNER.read_text())
+        print(f"\n                 UNVEIL — RADAR v{VERSION}\n")
 
     p = argparse.ArgumentParser(
         prog="unveil",
@@ -17,7 +24,7 @@ def main():
         epilog="Disclaimer: This tool is for educational purposes and authorized security testing only. Unauthorized use against systems without prior written consent is strictly prohibited. The author accepts no liability for misuse or damage."
     )
 
-    p.add_argument("--version", action="version", version="Unveil RADAR v0.7.0")
+    p.add_argument("--version", action="version", version=f"Unveil RADAR v{VERSION}")
 
     p.add_argument("-C", "--target", required=True,
                    help="Target directory or application bundle to analyze")
