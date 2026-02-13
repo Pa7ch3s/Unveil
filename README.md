@@ -59,9 +59,13 @@ It focuses on **exploit viability**, not just indicators.
 
 ## Install
 
+**CLI (recommended):**
+
 ```bash
 pipx install git+https://github.com/Pa7ch3s/Unveil.git
 ```
+
+**Burp Suite extension:** Add an **Unveil** tab inside Burp — see **[unveil-burp/](unveil-burp/)** for build and load instructions.
 
 **Upgrading from `unv`:** The CLI was renamed to `unveil`. If you still see `unv` or `unv-daemon` when you tab-complete:
 
