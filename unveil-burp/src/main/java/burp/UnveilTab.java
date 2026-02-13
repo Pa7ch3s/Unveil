@@ -53,6 +53,9 @@ public class UnveilTab {
     private final JTextField huntPlanFilterField;
     private final DefaultListModel<String> discoveredHtmlModel = new DefaultListModel<>();
     private final JList<String> discoveredHtmlList;
+    private final DefaultTableModel discoveredAssetsModel;
+    private final JTable discoveredAssetsTable;
+    private final JComboBox<String> discoveredAssetsTypeFilter;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private static final int RECENT_TARGETS_MAX = 5;
     private final List<String> recentTargets = new ArrayList<>();
@@ -222,6 +225,56 @@ public class UnveilTab {
         discoveredHtmlMenu.add(exportListItem);
         discoveredHtmlList.setComponentPopupMenu(discoveredHtmlMenu);
         resultsTabs.addTab("Discovered HTML", discoveredHtmlPanel);
+
+        // Discovered assets (all types: html, xml, json, config, script, plist, etc.)
+        this.discoveredAssetsModel = new DefaultTableModel(new String[] { "Path", "Type" }, 0);
+        this.discoveredAssetsTable = new JTable(discoveredAssetsModel);
+        discoveredAssetsTable.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
+        discoveredAssetsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        discoveredAssetsTable.setAutoCreateRowSorter(true);
+        JPanel discoveredAssetsPanel = new JPanel(new BorderLayout(4, 4));
+        JPanel discoveredAssetsToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        discoveredAssetsToolbar.add(new JLabel("Type:"));
+        this.discoveredAssetsTypeFilter = new JComboBox<>(new String[] { "All", "html", "xml", "json", "config", "script", "plist", "manifest", "policy", "cert", "data" });
+        discoveredAssetsTypeFilter.addActionListener(e -> applyDiscoveredAssetsTypeFilter());
+        discoveredAssetsToolbar.add(discoveredAssetsTypeFilter);
+        JButton openAssetBtn = new JButton("Open");
+        openAssetBtn.addActionListener(e -> openSelectedAsset());
+        discoveredAssetsToolbar.add(openAssetBtn);
+        JButton copyAssetPathBtn = new JButton("Copy path");
+        copyAssetPathBtn.addActionListener(e -> copySelectedAssetPath());
+        discoveredAssetsToolbar.add(copyAssetPathBtn);
+        JButton copyAssetFileUrlBtn = new JButton("Copy file:// URL");
+        copyAssetFileUrlBtn.addActionListener(e -> copySelectedAssetFileUrl());
+        discoveredAssetsToolbar.add(copyAssetFileUrlBtn);
+        JButton exportAssetsBtn = new JButton("Export list…");
+        exportAssetsBtn.addActionListener(e -> exportDiscoveredAssetsList());
+        discoveredAssetsToolbar.add(exportAssetsBtn);
+        discoveredAssetsPanel.add(discoveredAssetsToolbar, BorderLayout.NORTH);
+        discoveredAssetsPanel.add(new JScrollPane(discoveredAssetsTable), BorderLayout.CENTER);
+        discoveredAssetsTable.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent ev) {
+                if (ev.getClickCount() == 2) openSelectedAsset();
+            }
+        });
+        JPopupMenu discoveredAssetsMenu = new JPopupMenu();
+        JMenuItem openAssetItem = new JMenuItem("Open");
+        openAssetItem.addActionListener(e -> openSelectedAsset());
+        discoveredAssetsMenu.add(openAssetItem);
+        discoveredAssetsMenu.addSeparator();
+        JMenuItem copyAssetPathItem = new JMenuItem("Copy path");
+        copyAssetPathItem.addActionListener(e -> copySelectedAssetPath());
+        discoveredAssetsMenu.add(copyAssetPathItem);
+        JMenuItem copyAssetUrlItem = new JMenuItem("Copy file:// URL");
+        copyAssetUrlItem.addActionListener(e -> copySelectedAssetFileUrl());
+        discoveredAssetsMenu.add(copyAssetUrlItem);
+        discoveredAssetsMenu.addSeparator();
+        JMenuItem exportAssetsItem = new JMenuItem("Export list to file…");
+        exportAssetsItem.addActionListener(e -> exportDiscoveredAssetsList());
+        discoveredAssetsMenu.add(exportAssetsItem);
+        discoveredAssetsTable.setComponentPopupMenu(discoveredAssetsMenu);
+        resultsTabs.addTab("Discovered assets", discoveredAssetsPanel);
 
         this.rawJsonArea = new JTextArea(18, 80);
         rawJsonArea.setEditable(false);
@@ -565,6 +618,22 @@ public class UnveilTab {
                     }
                 }
             }
+            discoveredAssetsModel.setRowCount(0);
+            if (report.has("discovered_assets")) {
+                JsonObject assets = report.getAsJsonObject("discovered_assets");
+                if (assets != null) {
+                    for (String type : assets.keySet()) {
+                        JsonArray paths = assets.getAsJsonArray(type);
+                        if (paths != null) {
+                            for (JsonElement el : paths) {
+                                if (el.isJsonPrimitive())
+                                    discoveredAssetsModel.addRow(new Object[] { el.getAsString(), type });
+                            }
+                        }
+                    }
+                }
+            }
+            applyDiscoveredAssetsTypeFilter();
         } catch (Exception e) {
             logging.logToError("Unveil report parse error: " + e.getMessage());
             summaryArea.setText("Report received but parsing failed.\n\nSee Raw JSON tab.\n\n" + e.getMessage());
@@ -658,6 +727,91 @@ public class UnveilTab {
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < discoveredHtmlModel.getSize(); i++) {
                 sb.append(discoveredHtmlModel.getElementAt(i)).append("\n");
+            }
+            Files.writeString(f.toPath(), sb.toString(), StandardCharsets.UTF_8);
+            statusLabel.setText("Exported: " + f.getAbsolutePath());
+        } catch (IOException ex) {
+            statusLabel.setText("Export failed.");
+            JOptionPane.showMessageDialog(mainPanel, "Could not save: " + ex.getMessage(), "Export error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void applyDiscoveredAssetsTypeFilter() {
+        TableRowSorter<?> sorter = (TableRowSorter<?>) discoveredAssetsTable.getRowSorter();
+        if (sorter == null) return;
+        String type = (String) discoveredAssetsTypeFilter.getSelectedItem();
+        if (type == null || "All".equals(type)) {
+            sorter.setRowFilter(null);
+        } else {
+            sorter.setRowFilter(RowFilter.regexFilter("^" + java.util.regex.Pattern.quote(type) + "$", 1));
+        }
+    }
+
+    private String getSelectedAssetPath() {
+        int row = discoveredAssetsTable.getSelectedRow();
+        if (row < 0) return null;
+        int modelRow = discoveredAssetsTable.convertRowIndexToModel(row);
+        Object v = discoveredAssetsModel.getValueAt(modelRow, 0);
+        return v != null ? v.toString() : null;
+    }
+
+    private void openSelectedAsset() {
+        String path = getSelectedAssetPath();
+        if (path == null || path.isEmpty()) {
+            statusLabel.setText("Select an asset row.");
+            return;
+        }
+        try {
+            File f = new File(path);
+            if (f.exists() && Desktop.isDesktopSupported()) {
+                Desktop.getDesktop().open(f);
+                statusLabel.setText("Opened in default app.");
+            } else {
+                statusLabel.setText("Open not supported or file missing.");
+            }
+        } catch (Exception ex) {
+            statusLabel.setText("Open failed.");
+            logging.logToError("Open asset failed: " + ex.getMessage());
+        }
+    }
+
+    private void copySelectedAssetPath() {
+        String path = getSelectedAssetPath();
+        if (path == null || path.isEmpty()) {
+            statusLabel.setText("Select an asset row.");
+            return;
+        }
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(path), null);
+        statusLabel.setText("Path copied.");
+    }
+
+    private void copySelectedAssetFileUrl() {
+        String path = getSelectedAssetPath();
+        if (path == null || path.isEmpty()) {
+            statusLabel.setText("Select an asset row.");
+            return;
+        }
+        String url = pathToFileUrl(path);
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(url), null);
+        statusLabel.setText("file:// URL copied.");
+    }
+
+    private void exportDiscoveredAssetsList() {
+        if (discoveredAssetsModel.getRowCount() == 0) {
+            statusLabel.setText("No assets to export.");
+            return;
+        }
+        JFileChooser chooser = new JFileChooser();
+        chooser.setSelectedFile(new File("unveil-discovered-assets.txt"));
+        if (chooser.showSaveDialog(mainPanel) != JFileChooser.APPROVE_OPTION) return;
+        File f = chooser.getSelectedFile();
+        if (f == null) return;
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < discoveredAssetsModel.getRowCount(); i++) {
+                Object path = discoveredAssetsModel.getValueAt(i, 0);
+                Object type = discoveredAssetsModel.getValueAt(i, 1);
+                sb.append(path).append("\t").append(type).append("\n");
             }
             Files.writeString(f.toPath(), sb.toString(), StandardCharsets.UTF_8);
             statusLabel.setText("Exported: " + f.getAbsolutePath());

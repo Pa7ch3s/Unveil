@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+- **Discovered assets by type** — Report includes `discovered_assets` (html, xml, json, config, script, plist, manifest, policy, cert, data) with per-type caps; `discovered_html` kept for backward compatibility.
+- **Reference extraction** — Lightweight parsing of XML, JSON, and .config (size-capped) to extract paths/URLs; `extracted_refs` in report for chainability.
+- **HTML report** — Sections for discovered assets by type and extracted references.
+- **Burp** — “Discovered assets” tab with Path/Type table, type filter, Open / Copy path / Copy file:// URL / Export list; context menu and double-click to open.
+- **Professional pentest** — Aligns with thick-client testing methodology; README note on OWASP and professional use.
+
 ## [0.2.0] — unveil-burp (Burp Suite extension)
 
 - Full Unveil CLI options in UI: Path, Extended (-e), Offensive (-O), Force (-f), optional unveil executable path with Browse.

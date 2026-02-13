@@ -3,6 +3,7 @@ from unveil.static_parser import analyze
 from unveil.surface_expander import expand
 from unveil.surface_synth import synthesize
 from unveil.verdict_compiler import compile
+from unveil import asset_discovery
 from pathlib import Path
 import sys
 import tempfile
@@ -239,6 +240,11 @@ def harvest_windows_persistence(base, results, count_ref):
             count_ref[0] += 1
 
 
+def _empty_discovered_assets():
+    """Return a dict of asset type -> list (empty) for all ASSET_EXTENSIONS."""
+    return {t: [] for t in asset_discovery.ASSET_EXTENSIONS}
+
+
 def collect_discovered_html(root, out_list, max_items=DISCOVERED_HTML_MAX):
     """Collect .html/.htm paths under root for report (openable in browser for attacks/redev/transparency)."""
     root = Path(root)
@@ -253,9 +259,27 @@ def collect_discovered_html(root, out_list, max_items=DISCOVERED_HTML_MAX):
             out_list.append(str(item.resolve()))
 
 
-def harvest_bundle(bundle, base, results, count_ref, discovered_html=None):
-    if discovered_html is None:
-        discovered_html = []
+def _add_to_discovered_assets(item, discovered_assets):
+    """Append resolved path to discovered_assets[type] if type matches and list not full."""
+    if not discovered_assets or not item.is_file():
+        return
+    t = asset_discovery._suffix_to_type(item.suffix)
+    if t is None:
+        return
+    lst = discovered_assets.get(t)
+    if lst is None:
+        return
+    if len(lst) >= asset_discovery.MAX_PER_TYPE:
+        return
+    try:
+        lst.append(str(item.resolve()))
+    except (OSError, RuntimeError):
+        pass
+
+
+def harvest_bundle(bundle, base, results, count_ref, discovered_assets=None):
+    if discovered_assets is None:
+        discovered_assets = {}
     for item in bundle.rglob("*"):
         if count_ref[0] >= MAX_FILES:
             return
@@ -270,12 +294,16 @@ def harvest_bundle(bundle, base, results, count_ref, discovered_html=None):
         if name in SKIP_DIRS:
             continue
 
-        # Discovered HTML: list for interactivity (open in browser, redev, attacks)
-        if item.is_file() and item.suffix.lower() in (".html", ".htm"):
-            if len(discovered_html) < DISCOVERED_HTML_MAX:
-                discovered_html.append(str(item.resolve()))
+        # Discovered assets by type (html, xml, json, config, script, plist, etc.)
+        if item.is_file():
+            _add_to_discovered_assets(item, discovered_assets)
+            if item.suffix.lower() in (".html", ".htm"):
                 tick(f"    └─ [html] {rel.name}")
-            continue
+                continue
+            # Skip binary analysis for asset types we never run static analysis on
+            t = asset_discovery._suffix_to_type(item.suffix)
+            if t in ("xml", "json", "config", "manifest", "policy", "cert", "data"):
+                continue
 
         # Preload blade promotion
         if name == "preload.js":
@@ -435,7 +463,9 @@ def run(target):
                 "findings": [],
                 "surfaces": [],
                 "synth_indicators": [],
+                "discovered_assets": {},
                 "discovered_html": [],
+                "extracted_refs": [],
             }
         base = Path(mount_dir)
         unmount_dmg = mount_dir
@@ -455,7 +485,9 @@ def run(target):
                 "findings": [],
                 "surfaces": [],
                 "synth_indicators": [],
+                "discovered_assets": {},
                 "discovered_html": [],
+                "extracted_refs": [],
             }
         base = root
         unpack_dir = tmp
@@ -473,15 +505,19 @@ def run(target):
                 "findings": [],
                 "surfaces": [],
                 "synth_indicators": [],
+                "discovered_assets": {},
                 "discovered_html": [],
+                "extracted_refs": [],
             }
         base = root
         unpack_dir = tmp
         tick(f"[SCAN] {target}")
         count_ref = [0]
         harvest_apk(base, results, count_ref)
-        discovered_html_apk = []
-        collect_discovered_html(base, discovered_html_apk)
+        discovered_assets = _empty_discovered_assets()
+        asset_discovery.collect_discovered_assets(base, discovered_assets)
+        discovered_html_apk = list(discovered_assets.get("html") or [])
+        extracted_refs = asset_discovery.run_reference_extraction(discovered_assets)
         tick("[DONE]")
         findings, synth, verdict = build_reasoning(results)
         if unpack_dir:
@@ -493,7 +529,9 @@ def run(target):
             "findings": findings,
             "surfaces": findings,
             "synth_indicators": synth,
+            "discovered_assets": discovered_assets,
             "discovered_html": discovered_html_apk,
+            "extracted_refs": extracted_refs,
         }
 
     # -------- Single File Mode (non-DMG file) --------
@@ -507,7 +545,10 @@ def run(target):
         surfaces_single = [{"surface": entry["class"], "path": entry["file"]}]
         synth = synthesize(surfaces_single)
         verdict = compile(synth, [], [])
-        single_discovered = [str(base.resolve())] if base.suffix.lower() in (".html", ".htm") else []
+        discovered_assets = _empty_discovered_assets()
+        if base.suffix.lower() in (".html", ".htm"):
+            discovered_assets["html"] = [str(base.resolve())]
+        discovered_html_single = list(discovered_assets.get("html") or [])
         return {
             "metadata": {"target": target},
             "results": [entry],
@@ -515,7 +556,9 @@ def run(target):
             "findings": [],
             "surfaces": [],
             "synth_indicators": synth,
-            "discovered_html": single_discovered,
+            "discovered_assets": discovered_assets,
+            "discovered_html": discovered_html_single,
+            "extracted_refs": [],
         }
 
     # -------- Directory Mode (or mounted DMG) --------
@@ -529,19 +572,19 @@ def run(target):
     if not bundles and base.is_dir() and base.suffix.lower() == ".app":
         bundles = [base]
 
-    discovered_html = []
+    discovered_assets = _empty_discovered_assets()
     for bundle in bundles:
         if count_ref[0] >= MAX_FILES:
             break
 
         rel = bundle.relative_to(base)
         tick(f"[APP] {rel}")
-        harvest_bundle(bundle, base, results, count_ref, discovered_html)
+        harvest_bundle(bundle, base, results, count_ref, discovered_assets)
 
     # No .app bundles (e.g. Windows app dir): harvest .exe/.dll/.so etc. from the tree
     if not bundles:
         harvest_directory_binaries(base, results, count_ref)
-    collect_discovered_html(base, discovered_html)
+    asset_discovery.collect_discovered_assets(base, discovered_assets)
 
     # Windows persistence: harvest Tasks/Startup/Run/Scripts artifacts when scanning a directory
     harvest_windows_persistence(base, results, count_ref)
@@ -556,6 +599,8 @@ def run(target):
     if unpack_dir:
         shutil.rmtree(unpack_dir, ignore_errors=True)
 
+    discovered_html = list(discovered_assets.get("html") or [])
+    extracted_refs = asset_discovery.run_reference_extraction(discovered_assets)
     return {
         "metadata": {"target": target},
         "results": results,
@@ -563,5 +608,7 @@ def run(target):
         "findings": findings,
         "surfaces": findings,
         "synth_indicators": synth,
+        "discovered_assets": discovered_assets,
         "discovered_html": discovered_html,
+        "extracted_refs": extracted_refs,
     }

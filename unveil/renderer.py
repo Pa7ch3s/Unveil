@@ -24,6 +24,11 @@ summary {{ cursor: pointer; font-weight: bold; }}
 .discovered-html a {{ color: #7afcff; text-decoration: none; }}
 .discovered-html a:hover {{ text-decoration: underline; }}
 .discovered-html li {{ margin: 6px 0; }}
+.discovered-assets h3 {{ font-size: 1em; color: #b0b0b0; margin-top: 12px; }}
+.discovered-assets ul {{ margin: 4px 0; }}
+.discovered-assets a {{ color: #7afcff; text-decoration: none; }}
+.extracted-refs dd {{ margin-left: 1em; }}
+.extracted-refs dt {{ margin-top: 8px; }}
 </style>
 </head>
 <body>
@@ -32,6 +37,8 @@ summary {{ cursor: pointer; font-weight: bold; }}
 <div class="badge {band}">Exploitability: {band}</div>
 
 {discovered_html_section}
+{discovered_assets_section}
+{extracted_refs_section}
 
 <details class="section" open>
 <summary>Killchain Verdict</summary>
@@ -58,6 +65,24 @@ DISCOVERED_HTML_SECTION = """
 <ul>
 {links}
 </ul>
+</details>
+"""
+
+DISCOVERED_ASSETS_SECTION = """
+<details class="section discovered-assets">
+<summary>Discovered assets by type ({total}) – configs, scripts, certs, data</summary>
+<p>Files by extension type for recon and chainability.</p>
+{by_type}
+</details>
+"""
+
+EXTRACTED_REFS_SECTION = """
+<details class="section extracted-refs">
+<summary>Extracted references ({count}) – paths/URLs from XML, JSON, config</summary>
+<p>References parsed from config files for chainability.</p>
+<dl>
+{entries}
+</dl>
 </details>
 """
 
@@ -96,10 +121,55 @@ def render(report):
     else:
         discovered_html_section = ""
 
+    discovered_assets = report.get("discovered_assets") or {}
+    by_type_parts = []
+    display_cap_asset = 100
+    total_assets = 0
+    for asset_type in ("html", "xml", "json", "config", "script", "plist", "manifest", "policy", "cert", "data"):
+        paths = discovered_assets.get(asset_type) or []
+        if not paths:
+            continue
+        total_assets += len(paths)
+        link_items = []
+        for path in paths[:display_cap_asset]:
+            name = path.split("/")[-1].split("\\")[-1]
+            url = _file_url(path)
+            safe_path = html_module.escape(path)
+            link_items.append(f'<li><a href="{url}" title="{safe_path}">{html_module.escape(name)}</a></li>')
+        count_str = str(len(paths)) + (f" (first {display_cap_asset})" if len(paths) > display_cap_asset else "")
+        by_type_parts.append(f'<h3>{asset_type} ({count_str})</h3><ul>{"".join(link_items)}</ul>')
+    if by_type_parts:
+        discovered_assets_section = DISCOVERED_ASSETS_SECTION.format(
+            total=total_assets,
+            by_type="\n".join(by_type_parts),
+        )
+    else:
+        discovered_assets_section = ""
+
+    extracted_refs = report.get("extracted_refs") or []
+    if extracted_refs:
+        entries = []
+        for item in extracted_refs[:50]:
+            f = item.get("file", "")
+            refs = item.get("refs") or []
+            safe_f = html_module.escape(f)
+            refs_str = html_module.escape(", ".join(refs[:20]))
+            if len(refs) > 20:
+                refs_str += " …"
+            entries.append(f"<dt>{safe_f}</dt><dd>{refs_str}</dd>")
+        extracted_refs_section = EXTRACTED_REFS_SECTION.format(
+            count=len(extracted_refs),
+            entries="\n".join(entries),
+        )
+    else:
+        extracted_refs_section = ""
+
     return HTML_TEMPLATE.format(
         target=target,
         band=band,
         discovered_html_section=discovered_html_section,
+        discovered_assets_section=discovered_assets_section,
+        extracted_refs_section=extracted_refs_section,
         verdict=verdict,
         surfaces=surfaces,
         indicators=indicators,

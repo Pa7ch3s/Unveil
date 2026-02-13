@@ -58,6 +58,10 @@ It focuses on **exploit viability**, not just indicators.
 * **Windows persistence pack** — Run/RunOnce, Services, Scheduled Tasks, Startup, Winlogon, Scripts; `.xml`, `.vbs`, `.bat`, `.ps1`, `.cmd` in those paths are harvested and tagged (ANCHOR).
 * **.NET pack** — PE files with a CLR (COM descriptor) directory are tagged as managed assemblies; deserialization, remoting, and assembly-load surfaces with CWE/CVE-style intel (ANCHOR).
 * **Nmap-style summary** — Target, exploitability band, killchain roles, frameworks, and surface counts before the full JSON.
+* **Discovered assets** — Configs, scripts, certs, manifests, and data files by type (html, xml, json, config, script, plist, manifest, policy, cert, data) for recon and chainability.
+* **Reference extraction** — Lightweight parsing of XML, JSON, and .config files to extract paths and URLs for trust-boundary and chain mapping.
+
+**Professional use:** Unveil’s recon and surface model aligns with thick-client security testing (e.g. [OWASP](https://owasp.org/) thick-client and desktop app guidance). Use the report’s `discovered_assets`, `extracted_refs`, and hunt plan for structured pentest workflows.
 
 ---
 
