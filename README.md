@@ -9,7 +9,7 @@
 ---
 > **Disclaimer:** This tool is for educational purposes and authorized security testing only. Unauthorized use against systems without prior written consent is strictly prohibited. The author accepts no liability for misuse or damage.
 ---
-It focuses on **exploit viability**, not just indicators.
+Focuses on **exploit viability**, not just indicators.
 
 > * File identification and metadata extraction
 > * Cryptographic hashing (MD5 / SHA1 / SHA256)
@@ -21,7 +21,7 @@ It focuses on **exploit viability**, not just indicators.
 
 ---
 
-"Models execution surfaces, trust boundaries, persistence anchors, and lateral bridges... then tells you what to hunt next."
+Models: execution surfaces, trust boundaries, persistence anchors, and lateral bridges
 
 ---
 
