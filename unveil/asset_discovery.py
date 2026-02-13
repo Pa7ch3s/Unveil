@@ -36,7 +36,7 @@ def _suffix_to_type(suffix):
 
 
 def collect_discovered_assets(root, out_dict, max_per_type=MAX_PER_TYPE):
-    """Collect file paths by asset type under root. Fills out_dict[type] = [paths]."""
+    """Collect file paths by asset type under root. Fills out_dict[type] = [paths]. Dedupes by path."""
     root = Path(root)
     if not root.is_dir():
         return
@@ -53,7 +53,9 @@ def collect_discovered_assets(root, out_dict, max_per_type=MAX_PER_TYPE):
         if len(lst) >= max_per_type:
             continue
         try:
-            lst.append(str(item.resolve()))
+            resolved = str(item.resolve())
+            if resolved not in lst:
+                lst.append(resolved)
         except (OSError, RuntimeError):
             pass
 
@@ -200,13 +202,24 @@ def extract_references(file_path, asset_type, max_size=REF_EXTRACT_MAX_SIZE):
 def run_reference_extraction(discovered_assets, max_files_per_type=REF_EXTRACT_MAX_FILES):
     """
     Run reference extraction on xml, json, config, plist assets. Returns list of
-    {"file": path, "refs": [ref1, ...]} for chainability.
+    {"file": path, "refs": [ref1, ...]} for chainability. One entry per file; refs merged if path appeared in multiple types.
     """
-    out = []
+    file_refs = {}  # file path -> set of refs
+    seen_paths = set()
     for t in ("xml", "json", "config", "plist", "env"):
         paths = discovered_assets.get(t) or []
         for p in paths[:max_files_per_type]:
+            try:
+                canonical = str(Path(p).resolve())
+            except (OSError, RuntimeError):
+                canonical = p
+            if canonical in seen_paths:
+                continue
+            seen_paths.add(canonical)
             entry = extract_references(p, t)
             if entry:
-                out.append(entry)
-    return out
+                f = entry["file"]
+                if f not in file_refs:
+                    file_refs[f] = set()
+                file_refs[f].update(entry.get("refs") or [])
+    return [{"file": f, "refs": list(refs)[:100]} for f, refs in file_refs.items()]

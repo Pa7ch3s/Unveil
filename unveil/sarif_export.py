@@ -42,6 +42,15 @@ def report_to_sarif(report, run_uri=None):
                 "locations": [{"physicalLocation": {"artifactLocation": {"uri": str(p)}}}],
             })
 
+    checklist = report.get("checklist_findings") or []
+    for c in checklist[:80]:
+        results_sarif.append({
+            "ruleId": "unveil/checklist",
+            "level": "warning",
+            "message": {"text": c.get("snippet", "")[:200]},
+            "locations": [{"physicalLocation": {"artifactLocation": {"uri": c.get("file", "")}}}],
+        })
+
     return {
         "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
         "version": "2.1.0",
@@ -62,6 +71,11 @@ def report_to_sarif(report, run_uri=None):
                                 "id": "unveil/surface",
                                 "name": "Attack surface",
                                 "shortDescription": {"text": "Weaponizable surface finding"},
+                            },
+                            {
+                                "id": "unveil/checklist",
+                                "name": "Checklist / potential secret",
+                                "shortDescription": {"text": "Static analysis checklist item or potential hardcoded credential"},
                             },
                         ],
                     }

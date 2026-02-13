@@ -7,6 +7,7 @@ from unveil import asset_discovery
 from unveil import config as _config
 from unveil.electron_info import get_electron_info
 from unveil.chainability import build_chainability
+from unveil.checklist_scan import run_checklist
 from pathlib import Path
 import sys
 import tempfile
@@ -334,7 +335,7 @@ def collect_discovered_html(root, out_list, max_items=DISCOVERED_HTML_MAX):
 
 
 def _add_to_discovered_assets(item, discovered_assets):
-    """Append resolved path to discovered_assets[type] if type matches and list not full."""
+    """Append resolved path to discovered_assets[type] if type matches, list not full, and path not already present."""
     if not discovered_assets or not item.is_file():
         return
     t = asset_discovery._suffix_to_type(item.suffix)
@@ -346,7 +347,9 @@ def _add_to_discovered_assets(item, discovered_assets):
     if len(lst) >= asset_discovery.MAX_PER_TYPE:
         return
     try:
-        lst.append(str(item.resolve()))
+        resolved = str(item.resolve())
+        if resolved not in lst:
+            lst.append(resolved)
     except (OSError, RuntimeError):
         pass
 
@@ -644,6 +647,7 @@ def run(
             "extracted_refs": extracted_refs,
             "electron_info": get_electron_info(discovered_assets),
             "chainability": build_chainability(extracted_refs, discovered_assets),
+            "checklist_findings": run_checklist(discovered_assets),
         }
 
     # -------- JAR/WAR Mode: unpack and report manifest --------
@@ -694,6 +698,7 @@ def run(
             "extracted_refs": extracted_refs_jar,
             "electron_info": {},
             "chainability": build_chainability(extracted_refs_jar, discovered_assets_jar),
+            "checklist_findings": run_checklist(discovered_assets_jar),
         }
 
     # -------- Single File Mode (non-DMG file) --------
@@ -708,7 +713,14 @@ def run(
         discovered_assets = _empty_discovered_assets()
         if base.suffix.lower() in (".html", ".htm"):
             discovered_assets["html"] = [str(base.resolve())]
+        for typ, exts in (("json", (".json",)), ("config", (".config", ".conf", ".cfg", ".ini", ".yaml", ".yml")), ("env", (".env", ".env.local"))):
+            if base.suffix.lower() in exts:
+                discovered_assets[typ] = [str(base.resolve())]
+                break
+        if any(base.name.endswith(s) for s in (".js", ".ts", ".mjs", ".cjs")):
+            discovered_assets["script"] = [str(base.resolve())]
         discovered_html_single = list(discovered_assets.get("html") or [])
+        checklist_single = run_checklist(discovered_assets)
         return {
             "metadata": {"target": target},
             "results": [entry],
@@ -721,6 +733,7 @@ def run(
             "extracted_refs": [],
             "electron_info": {},
             "chainability": [],
+            "checklist_findings": checklist_single,
         }
 
     # -------- Directory Mode (or mounted DMG) --------
@@ -781,4 +794,5 @@ def run(
         "extracted_refs": extracted_refs,
         "electron_info": get_electron_info(discovered_assets),
         "chainability": build_chainability(extracted_refs, discovered_assets),
+        "checklist_findings": run_checklist(discovered_assets),
     }

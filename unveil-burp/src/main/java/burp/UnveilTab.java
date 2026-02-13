@@ -2,6 +2,9 @@ package burp;
 
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.logging.Logging;
+import burp.api.montoya.scanner.audit.issues.AuditIssue;
+import burp.api.montoya.scanner.audit.issues.AuditIssueConfidence;
+import burp.api.montoya.scanner.audit.issues.AuditIssueSeverity;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -20,12 +23,17 @@ import java.awt.Desktop;
 import java.awt.event.ActionEvent;
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.prefs.Preferences;
 
 /**
  * Unveil tab — path, options (-e, -O, -f), scan, then Summary / Hunt plan / Raw JSON views.
@@ -40,6 +48,13 @@ public class UnveilTab {
     private final JCheckBox optExtended;
     private final JCheckBox optOffensive;
     private final JCheckBox optForce;
+    private final JCheckBox optCve;
+    private final JCheckBox useDaemonCheck;
+    private final JTextField daemonUrlField;
+    private final JSpinner maxFilesSpinner;
+    private final JSpinner maxSizeMbSpinner;
+    private final JSpinner maxPerTypeSpinner;
+    private final JTextField baselinePathField;
     private final JButton scanButton;
     private final JLabel statusLabel;
     private final JTabbedPane resultsTabs;
@@ -56,7 +71,18 @@ public class UnveilTab {
     private final DefaultTableModel discoveredAssetsModel;
     private final JTable discoveredAssetsTable;
     private final JComboBox<String> discoveredAssetsTypeFilter;
+    private final DefaultTableModel chainabilityModel;
+    private final JTable chainabilityTable;
+    private final DefaultTableModel extractedRefsModel;
+    private final JTable extractedRefsTable;
+    private final DefaultListModel<String> possibleCvesModel = new DefaultListModel<>();
+    private final JList<String> possibleCvesList;
+    private final DefaultTableModel electronInfoModel;
+    private final JTable electronInfoTable;
+    private final DefaultTableModel checklistModel;
+    private final JTable checklistTable;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private static final String PREFS_NODE = "unveil-burp";
     private static final int RECENT_TARGETS_MAX = 5;
     private final List<String> recentTargets = new ArrayList<>();
 
@@ -110,6 +136,48 @@ public class UnveilTab {
         this.optForce = new JCheckBox("Force (-f)", false);
         optForce.setToolTipText("Force analysis of unsigned / malformed binaries");
         optionsPanel.add(optForce);
+        this.optCve = new JCheckBox("CVE (--cve)", false);
+        optCve.setToolTipText("Add possible_cves (hunt queries) to report");
+        optionsPanel.add(optCve);
+
+        // Daemon mode
+        JPanel daemonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+        this.useDaemonCheck = new JCheckBox("Use daemon", false);
+        useDaemonCheck.setToolTipText("Call POST /scan instead of CLI (faster repeat scans)");
+        daemonPanel.add(useDaemonCheck);
+        this.daemonUrlField = new JTextField(28);
+        daemonUrlField.setToolTipText("e.g. http://127.0.0.1:8000");
+        daemonUrlField.setText("http://127.0.0.1:8000");
+        daemonPanel.add(new JLabel("URL:"));
+        daemonPanel.add(daemonUrlField);
+
+        // Limits (optional)
+        JPanel limitsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+        limitsPanel.add(new JLabel("Max files:"));
+        this.maxFilesSpinner = new JSpinner(new javax.swing.SpinnerNumberModel(80, 1, 10000, 1));
+        maxFilesSpinner.setToolTipText("Leave default or set (CLI --max-files)");
+        limitsPanel.add(maxFilesSpinner);
+        limitsPanel.add(new JLabel("Max size (MB):"));
+        this.maxSizeMbSpinner = new JSpinner(new javax.swing.SpinnerNumberModel(120, 1, 10000, 10));
+        limitsPanel.add(maxSizeMbSpinner);
+        limitsPanel.add(new JLabel("Max per type:"));
+        this.maxPerTypeSpinner = new JSpinner(new javax.swing.SpinnerNumberModel(500, 1, 10000, 50));
+        limitsPanel.add(maxPerTypeSpinner);
+
+        // Baseline
+        JPanel baselinePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+        baselinePanel.add(new JLabel("Baseline (optional):"));
+        this.baselinePathField = new JTextField(35);
+        baselinePathField.setToolTipText("Path to baseline report JSON for diff");
+        baselinePanel.add(baselinePathField);
+        JButton baselineBrowseBtn = new JButton("Browse…");
+        baselineBrowseBtn.addActionListener(ev -> {
+            JFileChooser ch = new JFileChooser();
+            ch.setSelectedFile(new File("baseline-report.json"));
+            if (ch.showOpenDialog(mainPanel) == JFileChooser.APPROVE_OPTION && ch.getSelectedFile() != null)
+                baselinePathField.setText(ch.getSelectedFile().getAbsolutePath());
+        });
+        baselinePanel.add(baselineBrowseBtn);
 
         // Optional path to unveil binary
         JPanel unveilPathPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
@@ -140,6 +208,9 @@ public class UnveilTab {
         this.exportHtmlBtn = new JButton("Export HTML…");
         exportHtmlBtn.addActionListener(e -> exportHtml());
         resultsToolbar.add(exportHtmlBtn);
+        JButton exportSarifBtn = new JButton("Export SARIF…");
+        exportSarifBtn.addActionListener(e -> exportSarif());
+        resultsToolbar.add(exportSarifBtn);
         resultsToolbar.setVisible(false);
 
         this.resultsTabs = new JTabbedPane();
@@ -235,7 +306,7 @@ public class UnveilTab {
         JPanel discoveredAssetsPanel = new JPanel(new BorderLayout(4, 4));
         JPanel discoveredAssetsToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         discoveredAssetsToolbar.add(new JLabel("Type:"));
-        this.discoveredAssetsTypeFilter = new JComboBox<>(new String[] { "All", "html", "xml", "json", "config", "script", "plist", "manifest", "policy", "cert", "data" });
+        this.discoveredAssetsTypeFilter = new JComboBox<>(new String[] { "All", "html", "xml", "json", "config", "script", "plist", "manifest", "policy", "cert", "data", "env" });
         discoveredAssetsTypeFilter.addActionListener(e -> applyDiscoveredAssetsTypeFilter());
         discoveredAssetsToolbar.add(discoveredAssetsTypeFilter);
         JButton openAssetBtn = new JButton("Open");
@@ -276,6 +347,50 @@ public class UnveilTab {
         discoveredAssetsTable.setComponentPopupMenu(discoveredAssetsMenu);
         resultsTabs.addTab("Discovered assets", discoveredAssetsPanel);
 
+        // Electron info
+        this.electronInfoModel = new DefaultTableModel(new String[] { "Key", "Value" }, 0);
+        this.electronInfoTable = new JTable(electronInfoModel);
+        electronInfoTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        JPanel electronInfoPanel = new JPanel(new BorderLayout());
+        electronInfoPanel.add(new JScrollPane(electronInfoTable), BorderLayout.CENTER);
+        resultsTabs.addTab("Electron info", electronInfoPanel);
+
+        // Chainability
+        this.chainabilityModel = new DefaultTableModel(new String[] { "File", "Ref", "In scope", "Matched type" }, 0);
+        this.chainabilityTable = new JTable(chainabilityModel);
+        chainabilityTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        chainabilityTable.setAutoCreateRowSorter(true);
+        resultsTabs.addTab("Chainability", new JScrollPane(chainabilityTable));
+
+        // Extracted refs
+        this.extractedRefsModel = new DefaultTableModel(new String[] { "File", "Refs" }, 0);
+        this.extractedRefsTable = new JTable(extractedRefsModel);
+        extractedRefsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        extractedRefsTable.setAutoCreateRowSorter(true);
+        JPanel extractedRefsPanel = new JPanel(new BorderLayout());
+        extractedRefsPanel.add(new JScrollPane(extractedRefsTable), BorderLayout.CENTER);
+        resultsTabs.addTab("Extracted refs", extractedRefsPanel);
+
+        // Possible CVEs
+        this.possibleCvesList = new JList<>(possibleCvesModel);
+        possibleCvesList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        JPanel possibleCvesPanel = new JPanel(new BorderLayout(4, 4));
+        JPanel possibleCvesToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        possibleCvesToolbar.add(new JLabel("Hunt queries / possible CVE search terms (from verdict or --cve):"));
+        JButton copyCvesBtn = new JButton("Copy all");
+        copyCvesBtn.addActionListener(e -> copyPossibleCves());
+        possibleCvesToolbar.add(copyCvesBtn);
+        possibleCvesPanel.add(possibleCvesToolbar, BorderLayout.NORTH);
+        possibleCvesPanel.add(new JScrollPane(possibleCvesList), BorderLayout.CENTER);
+        resultsTabs.addTab("Possible CVEs", possibleCvesPanel);
+
+        // Checklist (potential secrets / static analysis no-nos)
+        this.checklistModel = new DefaultTableModel(new String[] { "File", "Pattern", "Snippet", "Line" }, 0);
+        this.checklistTable = new JTable(checklistModel);
+        checklistTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        checklistTable.setAutoCreateRowSorter(true);
+        resultsTabs.addTab("Checklist", new JScrollPane(checklistTable));
+
         this.rawJsonArea = new JTextArea(18, 80);
         rawJsonArea.setEditable(false);
         rawJsonArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
@@ -289,6 +404,9 @@ public class UnveilTab {
         controls.setLayout(new BoxLayout(controls, BoxLayout.PAGE_AXIS));
         controls.add(inputPanel);
         controls.add(optionsPanel);
+        controls.add(daemonPanel);
+        controls.add(limitsPanel);
+        controls.add(baselinePanel);
         controls.add(unveilPathPanel);
         top.add(controls, BorderLayout.CENTER);
 
@@ -300,7 +418,51 @@ public class UnveilTab {
         mainPanel.add(top, BorderLayout.NORTH);
         mainPanel.add(center, BorderLayout.CENTER);
 
+        loadPreferences();
         executor.submit(this::fetchUnveilVersion);
+    }
+
+    private void loadPreferences() {
+        try {
+            Preferences prefs = Preferences.userRoot().node(PREFS_NODE);
+            String exe = prefs.get("unveilExe", "");
+            if (!exe.isEmpty()) unveilExeField.setText(exe);
+            String daemonUrl = prefs.get("daemonUrl", "http://127.0.0.1:8000");
+            daemonUrlField.setText(daemonUrl);
+            useDaemonCheck.setSelected(prefs.getBoolean("useDaemon", false));
+            optExtended.setSelected(prefs.getBoolean("optExtended", false));
+            optOffensive.setSelected(prefs.getBoolean("optOffensive", false));
+            optForce.setSelected(prefs.getBoolean("optForce", false));
+            optCve.setSelected(prefs.getBoolean("optCve", false));
+            maxFilesSpinner.setValue(prefs.getInt("maxFiles", 80));
+            maxSizeMbSpinner.setValue(prefs.getInt("maxSizeMb", 120));
+            maxPerTypeSpinner.setValue(prefs.getInt("maxPerType", 500));
+            String baseline = prefs.get("baselinePath", "");
+            if (!baseline.isEmpty()) baselinePathField.setText(baseline);
+        } catch (Exception e) {
+            logging.logToError("Load preferences: " + e.getMessage());
+        }
+    }
+
+    private void savePreferences() {
+        try {
+            Preferences prefs = Preferences.userRoot().node(PREFS_NODE);
+            String exe = unveilExeField.getText();
+            prefs.put("unveilExe", exe != null ? exe.trim() : "");
+            prefs.put("daemonUrl", daemonUrlField.getText() != null ? daemonUrlField.getText().trim() : "http://127.0.0.1:8000");
+            prefs.putBoolean("useDaemon", useDaemonCheck.isSelected());
+            prefs.putBoolean("optExtended", optExtended.isSelected());
+            prefs.putBoolean("optOffensive", optOffensive.isSelected());
+            prefs.putBoolean("optForce", optForce.isSelected());
+            prefs.putBoolean("optCve", optCve.isSelected());
+            prefs.putInt("maxFiles", ((Number) maxFilesSpinner.getValue()).intValue());
+            prefs.putInt("maxSizeMb", ((Number) maxSizeMbSpinner.getValue()).intValue());
+            prefs.putInt("maxPerType", ((Number) maxPerTypeSpinner.getValue()).intValue());
+            String baseline = baselinePathField.getText();
+            prefs.put("baselinePath", baseline != null ? baseline.trim() : "");
+        } catch (Exception e) {
+            logging.logToError("Save preferences: " + e.getMessage());
+        }
     }
 
     private void fetchUnveilVersion() {
@@ -311,8 +473,21 @@ public class UnveilTab {
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
             p.waitFor();
-            String version = out.isEmpty() ? "—" : out.split("\\r?\\n")[0];
-            SwingUtilities.invokeLater(() -> versionLabel.setText("Unveil CLI: " + version));
+            String version = "—";
+            if (!out.isEmpty()) {
+                String[] lines = out.split("\\r?\\n");
+                for (int i = lines.length - 1; i >= 0; i--) {
+                    String line = lines[i].trim();
+                    if (line.contains("RADAR") && line.contains("v")) {
+                        version = line;
+                        break;
+                    }
+                }
+                if ("—".equals(version) && lines.length > 0)
+                    version = lines[lines.length - 1].trim();
+            }
+            String finalVersion = version;
+            SwingUtilities.invokeLater(() -> versionLabel.setText("Unveil CLI: " + finalVersion));
         } catch (Exception e) {
             SwingUtilities.invokeLater(() -> versionLabel.setText("Unveil CLI: not found"));
         }
@@ -420,7 +595,11 @@ public class UnveilTab {
         rawJsonArea.setText("");
         resultsToolbar.setVisible(false);
         scanButton.setEnabled(false);
-        executor.submit(() -> runUnveil(target));
+        if (useDaemonCheck.isSelected()) {
+            executor.submit(() -> runUnveilViaDaemon(target));
+        } else {
+            executor.submit(() -> runUnveil(target));
+        }
     }
 
     private void rescanLast() {
@@ -436,7 +615,69 @@ public class UnveilTab {
         rawJsonArea.setText("");
         resultsToolbar.setVisible(false);
         scanButton.setEnabled(false);
-        executor.submit(() -> runUnveil(last));
+        if (useDaemonCheck.isSelected()) {
+            executor.submit(() -> runUnveilViaDaemon(last));
+        } else {
+            executor.submit(() -> runUnveil(last));
+        }
+    }
+
+    private void runUnveilViaDaemon(String target) {
+        String urlStr = daemonUrlField.getText() != null ? daemonUrlField.getText().trim() : "";
+        if (urlStr.isEmpty()) {
+            onUnveilError("Daemon URL is empty.", "Set URL or use CLI.", false);
+            return;
+        }
+        String base = urlStr.endsWith("/") ? urlStr : urlStr + "/";
+        try {
+            URL url = new URL(base + "scan");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(30000);
+            conn.setReadTimeout(300000);
+            JsonObject body = new JsonObject();
+            body.addProperty("target", target);
+            body.addProperty("extended", optExtended.isSelected());
+            body.addProperty("offensive", optOffensive.isSelected());
+            body.addProperty("max_files", ((Number) maxFilesSpinner.getValue()).intValue());
+            body.addProperty("max_size_mb", ((Number) maxSizeMbSpinner.getValue()).intValue());
+            body.addProperty("max_per_type", ((Number) maxPerTypeSpinner.getValue()).intValue());
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(body.toString().getBytes(StandardCharsets.UTF_8));
+            }
+            int code = conn.getResponseCode();
+            String responseBody = code >= 200 && code < 300
+                ? new String(conn.getInputStream().readAllBytes(), StandardCharsets.UTF_8)
+                : new String(conn.getErrorStream() != null ? conn.getErrorStream().readAllBytes() : new byte[0], StandardCharsets.UTF_8);
+            String finalResult = responseBody.trim();
+            SwingUtilities.invokeLater(() -> {
+                scanButton.setEnabled(true);
+                if (code >= 200 && code < 300 && !finalResult.isEmpty()) {
+                    statusLabel.setText("Done (daemon).");
+                    recentTargets.remove(target);
+                    recentTargets.add(0, target);
+                    while (recentTargets.size() > RECENT_TARGETS_MAX) recentTargets.remove(recentTargets.size() - 1);
+                    applyReport(finalResult);
+                    resultsToolbar.setVisible(true);
+                    savePreferences();
+                } else {
+                    statusLabel.setText("Daemon error.");
+                    summaryArea.setText("Daemon returned " + code + ".\n\n" + (finalResult.isEmpty() ? "No body." : finalResult));
+                    resultsToolbar.setVisible(false);
+                }
+            });
+        } catch (Exception ex) {
+            logging.logToError("Unveil daemon failed: " + ex.getMessage());
+            String msg = ex.getMessage();
+            SwingUtilities.invokeLater(() -> {
+                scanButton.setEnabled(true);
+                statusLabel.setText("Error.");
+                summaryArea.setText("Could not call daemon.\n\n" + (msg != null ? msg : ""));
+                resultsToolbar.setVisible(false);
+            });
+        }
     }
 
     private static String getUnveilPath() {
@@ -469,6 +710,30 @@ public class UnveilTab {
         if (optExtended.isSelected()) args.add("-e");
         if (optOffensive.isSelected()) args.add("-O");
         if (optForce.isSelected()) args.add("-f");
+        if (optCve.isSelected()) args.add("--cve");
+        Object mf = maxFilesSpinner.getValue();
+        if (mf != null && ((Number) mf).intValue() != 80) {
+            args.add("--max-files");
+            args.add(String.valueOf(((Number) mf).intValue()));
+        }
+        Object msm = maxSizeMbSpinner.getValue();
+        if (msm != null && ((Number) msm).intValue() != 120) {
+            args.add("--max-size-mb");
+            args.add(String.valueOf(((Number) msm).intValue()));
+        }
+        Object mpt = maxPerTypeSpinner.getValue();
+        if (mpt != null && ((Number) mpt).intValue() != 500) {
+            args.add("--max-per-type");
+            args.add(String.valueOf(((Number) mpt).intValue()));
+        }
+        String baseline = baselinePathField.getText() != null ? baselinePathField.getText().trim() : "";
+        if (!baseline.isEmpty()) {
+            File bf = new File(baseline);
+            if (bf.isFile()) {
+                args.add("--baseline");
+                args.add(bf.getAbsolutePath());
+            }
+        }
         if (jsonPath != null && !jsonPath.isEmpty()) {
             args.add("-xj");
             args.add(jsonPath);
@@ -524,6 +789,7 @@ public class UnveilTab {
                     while (recentTargets.size() > RECENT_TARGETS_MAX) recentTargets.remove(recentTargets.size() - 1);
                     applyReport(finalResult);
                     resultsToolbar.setVisible(true);
+                    savePreferences();
                 }
             });
         } catch (Exception ex) {
@@ -588,6 +854,44 @@ public class UnveilTab {
                     summary.append("\nHunt plan entries: ").append(hp != null ? hp.size() : 0).append("\n");
                 }
             }
+            if (report.has("electron_info")) {
+                JsonObject ei = report.getAsJsonObject("electron_info");
+                if (ei != null && ei.size() > 0) {
+                    summary.append("\nElectron info: present (see tab)\n");
+                }
+            }
+            if (report.has("chainability")) {
+                JsonArray ca = report.getAsJsonArray("chainability");
+                int inScope = 0;
+                if (ca != null) {
+                    for (JsonElement el : ca) {
+                        if (el.isJsonObject() && el.getAsJsonObject().has("in_scope") && el.getAsJsonObject().get("in_scope").getAsBoolean())
+                            inScope++;
+                    }
+                    summary.append("Chainability: ").append(ca.size()).append(" refs, ").append(inScope).append(" in scope\n");
+                }
+            }
+            if (report.has("possible_cves")) {
+                JsonArray pc = report.getAsJsonArray("possible_cves");
+                summary.append("Possible CVE queries: ").append(pc != null ? pc.size() : 0).append("\n");
+            }
+            if (report.has("diff")) {
+                JsonObject diff = report.getAsJsonObject("diff");
+                if (diff != null) {
+                    summary.append("\n--- Baseline diff ---\n");
+                    if (diff.has("added_findings")) {
+                        JsonArray a = diff.getAsJsonArray("added_findings");
+                        summary.append("Added findings: ").append(a != null ? a.size() : 0).append("\n");
+                    }
+                    if (diff.has("removed_findings")) {
+                        JsonArray r = diff.getAsJsonArray("removed_findings");
+                        summary.append("Removed findings: ").append(r != null ? r.size() : 0).append("\n");
+                    }
+                    if (diff.has("verdict_changed")) {
+                        summary.append("Verdict changed: ").append(diff.get("verdict_changed").getAsBoolean()).append("\n");
+                    }
+                }
+            }
 
             summaryArea.setText(summary.toString());
             summaryArea.setCaretPosition(0);
@@ -622,21 +926,186 @@ public class UnveilTab {
             if (report.has("discovered_assets")) {
                 JsonObject assets = report.getAsJsonObject("discovered_assets");
                 if (assets != null) {
+                    java.util.Set<String> seenAsset = new java.util.HashSet<>();
                     for (String type : assets.keySet()) {
                         JsonArray paths = assets.getAsJsonArray(type);
                         if (paths != null) {
                             for (JsonElement el : paths) {
-                                if (el.isJsonPrimitive())
-                                    discoveredAssetsModel.addRow(new Object[] { el.getAsString(), type });
+                                if (el.isJsonPrimitive()) {
+                                    String path = el.getAsString();
+                                    if (seenAsset.add(path + "\t" + type)) {
+                                        discoveredAssetsModel.addRow(new Object[] { path, type });
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
             applyDiscoveredAssetsTypeFilter();
+
+            electronInfoModel.setRowCount(0);
+            if (report.has("electron_info")) {
+                JsonObject ei = report.getAsJsonObject("electron_info");
+                if (ei != null) {
+                    for (String key : ei.keySet()) {
+                        JsonElement v = ei.get(key);
+                        electronInfoModel.addRow(new Object[] { key, v.isJsonPrimitive() ? v.getAsString() : v.toString() });
+                    }
+                }
+            }
+            chainabilityModel.setRowCount(0);
+            if (report.has("chainability")) {
+                JsonArray ca = report.getAsJsonArray("chainability");
+                if (ca != null) {
+                    for (JsonElement el : ca) {
+                        JsonObject row = el.getAsJsonObject();
+                        chainabilityModel.addRow(new Object[] {
+                            str(row.get("file")),
+                            str(row.get("ref")),
+                            row.has("in_scope") && row.get("in_scope").getAsBoolean() ? "Yes" : "No",
+                            str(row.get("matched_type"))
+                        });
+                    }
+                }
+            }
+            extractedRefsModel.setRowCount(0);
+            if (report.has("extracted_refs")) {
+                JsonArray er = report.getAsJsonArray("extracted_refs");
+                if (er != null) {
+                    java.util.Set<String> seenRef = new java.util.HashSet<>();
+                    for (JsonElement el : er) {
+                        JsonObject o = el.getAsJsonObject();
+                        String file = str(o.get("file"));
+                        JsonArray refs = o.has("refs") ? o.getAsJsonArray("refs") : null;
+                        StringBuilder refsStr = new StringBuilder();
+                        if (refs != null) {
+                            for (int i = 0; i < refs.size(); i++) {
+                                if (i > 0) refsStr.append(", ");
+                                refsStr.append(refs.get(i).getAsString());
+                            }
+                        }
+                        String key = file + "\t" + refsStr;
+                        if (seenRef.add(key)) {
+                            extractedRefsModel.addRow(new Object[] { file, refsStr.toString() });
+                        }
+                    }
+                }
+            }
+            possibleCvesModel.clear();
+            if (report.has("possible_cves")) {
+                JsonArray pc = report.getAsJsonArray("possible_cves");
+                if (pc != null) {
+                    for (JsonElement el : pc) {
+                        if (el.isJsonPrimitive()) possibleCvesModel.addElement(el.getAsString());
+                    }
+                }
+            }
+            if (possibleCvesModel.isEmpty() && verdict != null && verdict.has("hunt_queries")) {
+                JsonArray hq = verdict.getAsJsonArray("hunt_queries");
+                if (hq != null) {
+                    for (JsonElement el : hq) {
+                        if (el.isJsonPrimitive()) possibleCvesModel.addElement(el.getAsString());
+                    }
+                }
+            }
+            checklistModel.setRowCount(0);
+            if (report.has("checklist_findings")) {
+                JsonArray cf = report.getAsJsonArray("checklist_findings");
+                if (cf != null) {
+                    for (JsonElement el : cf) {
+                        if (el.isJsonObject()) {
+                            JsonObject row = el.getAsJsonObject();
+                            checklistModel.addRow(new Object[] {
+                                str(row.get("file")),
+                                str(row.get("pattern")),
+                                str(row.get("snippet")),
+                                row.has("line") ? row.get("line").getAsInt() : ""
+                            });
+                        }
+                    }
+                }
+            }
+            addFindingsToTarget(report);
         } catch (Exception e) {
             logging.logToError("Unveil report parse error: " + e.getMessage());
             summaryArea.setText("Report received but parsing failed.\n\nSee Raw JSON tab.\n\n" + e.getMessage());
+        }
+    }
+
+    private void addFindingsToTarget(JsonObject report) {
+        try {
+            JsonObject metadata = report.has("metadata") ? report.getAsJsonObject("metadata") : null;
+            String target = metadata != null && metadata.has("target") ? metadata.get("target").getAsString() : null;
+            if (target == null || target.isEmpty()) return;
+            String baseUrl = pathToFileUrl(new File(target).getAbsolutePath());
+            JsonObject verdict = report.has("verdict") ? report.getAsJsonObject("verdict") : null;
+            String band = verdict != null && verdict.has("exploitability_band") ? str(verdict.get("exploitability_band")) : "UNKNOWN";
+            int huntCount = 0;
+            if (verdict != null && verdict.has("hunt_plan")) {
+                JsonArray hp = verdict.getAsJsonArray("hunt_plan");
+                if (hp != null) huntCount = hp.size();
+            }
+            JsonArray checklist = report.has("checklist_findings") ? report.getAsJsonArray("checklist_findings") : null;
+            int checklistCount = checklist != null ? checklist.size() : 0;
+            StringBuilder detail = new StringBuilder();
+            detail.append("Exploitability band: ").append(band);
+            if (huntCount > 0) detail.append("; hunt plan entries: ").append(huntCount);
+            if (checklistCount > 0) detail.append("; checklist findings: ").append(checklistCount);
+            detail.append(". See Unveil tab for full report.");
+            AuditIssueSeverity severity = severityFromBand(band);
+            AuditIssue summaryIssue = AuditIssue.auditIssue(
+                "Unveil scan result",
+                detail.toString(),
+                "Review attack surfaces and checklist in the Unveil extension tab.",
+                baseUrl,
+                severity,
+                AuditIssueConfidence.CERTAIN,
+                "Unveil static analysis of application/binary.",
+                "Address findings in the Unveil report.",
+                severity,
+                Collections.emptyList()
+            );
+            api.siteMap().add(summaryIssue);
+            final int maxChecklistInTarget = 30;
+            if (checklist != null) {
+                for (int i = 0; i < Math.min(checklist.size(), maxChecklistInTarget); i++) {
+                    JsonElement el = checklist.get(i);
+                    if (!el.isJsonObject()) continue;
+                    JsonObject c = el.getAsJsonObject();
+                    String file = str(c.get("file"));
+                    String pattern = str(c.get("pattern"));
+                    String snippet = str(c.get("snippet"));
+                    if (file.isEmpty()) continue;
+                    String fileUrl = pathToFileUrl(new File(file).getAbsolutePath());
+                    AuditIssueSeverity sev = pattern.contains("password") || pattern.contains("secret") || pattern.contains("key") ? AuditIssueSeverity.HIGH : AuditIssueSeverity.MEDIUM;
+                    AuditIssue issue = AuditIssue.auditIssue(
+                        "Unveil: " + (pattern.isEmpty() ? "checklist" : pattern),
+                        snippet.isEmpty() ? "Potential secret or checklist item in " + file : snippet,
+                        "Remove or externalize secrets; fix static analysis no-nos.",
+                        fileUrl,
+                        sev,
+                        AuditIssueConfidence.TENTATIVE,
+                        "Static analysis checklist / potential hardcoded credential.",
+                        "See Unveil Checklist tab.",
+                        sev,
+                        Collections.emptyList()
+                    );
+                    api.siteMap().add(issue);
+                }
+            }
+        } catch (Exception e) {
+            logging.logToError("Unveil add to Target failed: " + e.getMessage());
+        }
+    }
+
+    private static AuditIssueSeverity severityFromBand(String band) {
+        if (band == null) return AuditIssueSeverity.MEDIUM;
+        switch (band.toUpperCase()) {
+            case "HIGH": return AuditIssueSeverity.HIGH;
+            case "MEDIUM": return AuditIssueSeverity.MEDIUM;
+            case "LOW": return AuditIssueSeverity.LOW;
+            default: return AuditIssueSeverity.MEDIUM;
         }
     }
 
@@ -885,6 +1354,63 @@ public class UnveilTab {
                 }
             }
         }
+    }
+
+    private void copyPossibleCves() {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < possibleCvesModel.getSize(); i++) {
+            if (i > 0) sb.append("\n");
+            sb.append(possibleCvesModel.getElementAt(i));
+        }
+        if (sb.length() == 0) {
+            statusLabel.setText("No CVE queries to copy.");
+            return;
+        }
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(sb.toString()), null);
+        statusLabel.setText("Possible CVE queries copied.");
+    }
+
+    private void exportSarif() {
+        String target = targetField.getText() == null ? "" : targetField.getText().trim();
+        if (target.isEmpty()) {
+            statusLabel.setText("Enter a path first.");
+            return;
+        }
+        JFileChooser chooser = new JFileChooser();
+        chooser.setSelectedFile(new File("unveil-report.sarif.json"));
+        if (chooser.showSaveDialog(mainPanel) != JFileChooser.APPROVE_OPTION) return;
+        File f = chooser.getSelectedFile();
+        if (f == null) return;
+        statusLabel.setText("Exporting SARIF…");
+        scanButton.setEnabled(false);
+        String outPath = f.getAbsolutePath();
+        executor.submit(() -> {
+            try {
+                List<String> args = new ArrayList<>();
+                args.add(resolveUnveilPath());
+                args.add("-C"); args.add(target);
+                args.add("-q"); args.add("-xs"); args.add(outPath);
+                if (optExtended.isSelected()) args.add("-e");
+                if (optOffensive.isSelected()) args.add("-O");
+                if (optForce.isSelected()) args.add("-f");
+                if (optCve.isSelected()) args.add("--cve");
+                ProcessBuilder pb = new ProcessBuilder(args);
+                pb.redirectErrorStream(true);
+                Process p = pb.start();
+                p.getInputStream().readAllBytes();
+                int exit = p.waitFor();
+                SwingUtilities.invokeLater(() -> {
+                    scanButton.setEnabled(true);
+                    statusLabel.setText(exit == 0 ? "SARIF exported: " + outPath : "SARIF export failed (exit " + exit + ").");
+                });
+            } catch (Exception ex) {
+                logging.logToError("SARIF export failed: " + ex.getMessage());
+                SwingUtilities.invokeLater(() -> {
+                    scanButton.setEnabled(true);
+                    statusLabel.setText("Export failed.");
+                });
+            }
+        });
     }
 
     private void exportHtml() {
