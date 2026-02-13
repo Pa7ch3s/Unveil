@@ -40,10 +40,14 @@ Models: execution surfaces, trust boundaries, persistence anchors, and lateral b
 | **.NET / CLR** (managed assemblies) | ✅ PE with CLR descriptor detected; deserialization, remoting, assembly-load surfaces (ANCHOR) |
 | **APK** (Android) | ✅ Unpacked; native `lib/*.so` harvested and analyzed (ELF) |
 | **IPA** (iOS) | ✅ Unpacked; `Payload/*.app` scanned like macOS bundles (Mach-O, plists) |
+| **JAR / WAR** (Java) | ✅ Unpacked; META-INF/manifest, discovered assets and refs; jar_archive surface |
+| **Linux persistence** (systemd, cron, autostart) | ✅ .service, .timer, .desktop in known paths harvested and tagged (ANCHOR) |
 
 ---
 
-## Features (v0.6.0)
+## Features (v0.7.0)
+
+* **New in v0.7.0** — Extended mode (-e) populates ATS/helpers for deeper surfaces; single-file gets full reasoning; BLADE hunt plan; configurable limits (CLI/env) and verbose logging; PE manifest extraction; Electron version/hardening in report; plist + .env ref extraction; chainability section (refs → discovered assets); Linux persistence (systemd, cron, autostart); JAR/WAR scan; Go/Rust/PyInstaller tags; SARIF export (-xs); diff/baseline (--baseline); daemon `POST /scan`; lief + per-run cache; tests; `--cve` for possible_cves.
 
 * **Mobile (APK / IPA)** — Point at an `.apk` or `.ipa`; Unveil unpacks it, then runs the full radar on native libs (APK) or `.app` bundles (IPA).
 * **DMG support** — Pass a `.dmg` path; Unveil mounts it, discovers `.app` bundles, runs the full pipeline, then unmounts.
@@ -109,7 +113,7 @@ Step-by-step commands with full syntax. Add screenshots where applicable.
 ```bash
 unveil --version
 ```
-Displays the installed version (e.g. `Unveil RADAR v0.6.0`).
+Displays the installed version (e.g. `Unveil RADAR v0.7.0`).
 
 ```bash
 unveil -h
@@ -266,14 +270,21 @@ Extended expansion, offensive synthesis, and indented JSON export in one run.
 
 | Flag | Description |
 |------|-------------|
-| `-C`, `--target` | **Required.** Path to directory, .app, file, .dmg, .ipa, or .apk. |
-| `-e` | Extended surface expansion. |
+| `-C`, `--target` | **Required.** Path to directory, .app, file, .dmg, .ipa, .apk, or .jar/.war. |
+| `-e` | Extended surface expansion (ATS/helpers from plists and paths). |
 | `-O` | Offensive surface synthesis (exploit-chain modeling). |
 | `-f` | Force analysis of unsigned/malformed binaries. |
 | `-q`, `--quiet` | Suppress banner and pretty summary. |
+| `-V`, `--verbose` | Structured JSON log to stderr (or `UNVEIL_LOG=1`). |
+| `--max-files N` | Max binaries to analyze (env: `UNVEIL_MAX_FILES`). |
+| `--max-size-mb MB` | Max file size in MB (env: `UNVEIL_MAX_SIZE_MB`). |
+| `--max-per-type N` | Max discovered assets per type (env: `UNVEIL_MAX_PER_TYPE`). |
 | `-xh FILE` | Export HTML report to FILE. |
 | `-xj FILE` | Export indented JSON report to FILE. |
 | `-xx FILE` | Export compact JSON report to FILE. |
+| `-xs FILE` | Export SARIF 2.1 report to FILE (for CI/IDE). |
+| `--baseline FILE` | Baseline report JSON; add diff and baseline_suppressed. |
+| `--cve` | Add `possible_cves` (hunt_queries) to report. |
 
 > *All output is JSON. Designed to drop directly into pipelines, tooling, and reports.*
 

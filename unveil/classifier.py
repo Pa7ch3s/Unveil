@@ -82,6 +82,23 @@ def classify(entry):
     if analysis.get("dotnet") is True:
         surfaces.append("dotnet_managed")
 
+    # Linux persistence (ANCHOR) – systemd, cron, autostart
+    if "systemd" in p or ".service" in p or ".timer" in p:
+        surfaces.append("linux_persistence")
+    if "cron" in p or "crontab" in p or "autostart" in p:
+        surfaces.append("linux_persistence")
+    if p.endswith(".desktop") and ("autostart" in p or "startup" in p):
+        surfaces.append("linux_persistence")
+
+    # Go / Rust / PyInstaller – tag for CVE search and recon (no killchain role by default)
+    file_type = (analysis.get("file_type") or "").lower()
+    if "go " in file_type or " go " in file_type:
+        surfaces.append("go_binary")
+    if "rust" in file_type:
+        surfaces.append("rust_binary")
+    if "pyinstaller" in file_type or "python" in file_type and "executable" in file_type:
+        surfaces.append("pyinstaller_binary")
+
     # ---------- EXPLOIT ATTRIBUTES ----------
 
     if entropy > 6.9:

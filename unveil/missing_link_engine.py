@@ -22,6 +22,18 @@ MISSING_LINK_TEMPLATES = {
             "hunt": "ATS exceptions, TLS downgrade paths",
             "reason": "required for network interception or injection"
         }
+    ],
+    "BLADE": [
+        {
+            "surface": "electron_preload",
+            "hunt": "preload.js, renderer RCE, ASAR write, code execution vectors",
+            "reason": "required for final code execution in renderer/main process"
+        },
+        {
+            "surface": "preload_write",
+            "hunt": "writable preload path, ASAR unpacked dir, electron main process",
+            "reason": "required to inject code into Electron process"
+        }
     ]
 }
 

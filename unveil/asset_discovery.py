@@ -5,6 +5,7 @@ Aligns with OWASP thick-client testing: configs, manifests, scripts, certs, data
 from pathlib import Path
 import re
 import json as _json
+import plistlib
 
 # Extension -> report type. Used for recon, chainability, and trust-boundary mapping.
 ASSET_EXTENSIONS = {
@@ -18,6 +19,7 @@ ASSET_EXTENSIONS = {
     "policy": {".policy"},
     "cert": {".cer", ".crt", ".pem", ".pfx", ".der"},
     "data": {".db", ".sqlite", ".log"},
+    "env": {".env"},
 }
 
 MAX_PER_TYPE = 500
@@ -112,6 +114,46 @@ def _extract_refs_config(path, content):
     return list(refs)[:50]
 
 
+def _extract_refs_env(content):
+    """Extract path/URL-like values from .env (KEY=value lines)."""
+    refs = set()
+    path_like = re.compile(r"^[A-Za-z]:\\|^/|\.(dll|exe|so|dylib|js|json|config|env)$")
+    url_like = re.compile(r"^https?://|^file://")
+    for line in content.splitlines():
+        if "=" not in line or line.strip().startswith("#"):
+            continue
+        _, _, v = line.partition("=")
+        v = v.strip().strip('"').strip("'").strip()
+        if len(v) < 400 and (path_like.search(v) or url_like.search(v) or "/" in v or "\\" in v):
+            refs.add(v)
+    return list(refs)[:50]
+
+
+def _extract_refs_plist(data):
+    """Extract URL schemes, bundle IDs, and path-like refs from plist dict (from plistlib.load)."""
+    refs = set()
+    if not isinstance(data, dict):
+        return []
+    # CFBundleURLTypes -> CFBundleURLSchemes (list of scheme strings)
+    for entry in (data.get("CFBundleURLTypes") or []):
+        if isinstance(entry, dict):
+            for scheme in (entry.get("CFBundleURLSchemes") or []):
+                if isinstance(scheme, str) and scheme:
+                    refs.add(scheme)
+    # CFBundleDocumentTypes -> CFBundleTypeExtensions, etc.
+    for entry in (data.get("CFBundleDocumentTypes") or []):
+        if isinstance(entry, dict):
+            for ext in (entry.get("CFBundleTypeExtensions") or []):
+                if isinstance(ext, str) and ext:
+                    refs.add("." + ext if not ext.startswith(".") else ext)
+    # Common path-like keys
+    for key in ("CFBundleExecutable", "CFBundleIdentifier", "NSPrincipalClass"):
+        v = data.get(key)
+        if isinstance(v, str) and len(v) < 300:
+            refs.add(v)
+    return list(refs)[:50]
+
+
 def extract_references(file_path, asset_type, max_size=REF_EXTRACT_MAX_SIZE):
     """
     Lightweight extraction of path/URL references from a config file.
@@ -123,16 +165,33 @@ def extract_references(file_path, asset_type, max_size=REF_EXTRACT_MAX_SIZE):
     try:
         if path.stat().st_size > max_size:
             return None
-        content = path.read_text(encoding="utf-8", errors="ignore")
-    except (OSError, UnicodeDecodeError):
+    except OSError:
         return None
     refs = []
-    if asset_type == "xml":
-        refs = _extract_refs_xml(file_path, content)
-    elif asset_type == "json":
-        refs = _extract_refs_json(file_path, content)
-    elif asset_type == "config":
-        refs = _extract_refs_config(file_path, content)
+    if asset_type == "plist":
+        try:
+            with open(path, "rb") as f:
+                data = plistlib.load(f)
+            refs = _extract_refs_plist(data)
+        except Exception:
+            return None
+    elif asset_type == "env":
+        try:
+            content = path.read_text(encoding="utf-8", errors="ignore")
+            refs = _extract_refs_env(content)
+        except (OSError, UnicodeDecodeError):
+            return None
+    else:
+        try:
+            content = path.read_text(encoding="utf-8", errors="ignore")
+        except (OSError, UnicodeDecodeError):
+            return None
+        if asset_type == "xml":
+            refs = _extract_refs_xml(file_path, content)
+        elif asset_type == "json":
+            refs = _extract_refs_json(file_path, content)
+        elif asset_type == "config":
+            refs = _extract_refs_config(file_path, content)
     if not refs:
         return None
     return {"file": str(path.resolve()), "refs": refs}
@@ -140,11 +199,11 @@ def extract_references(file_path, asset_type, max_size=REF_EXTRACT_MAX_SIZE):
 
 def run_reference_extraction(discovered_assets, max_files_per_type=REF_EXTRACT_MAX_FILES):
     """
-    Run reference extraction on xml, json, config assets. Returns list of
+    Run reference extraction on xml, json, config, plist assets. Returns list of
     {"file": path, "refs": [ref1, ...]} for chainability.
     """
     out = []
-    for t in ("xml", "json", "config"):
+    for t in ("xml", "json", "config", "plist", "env"):
         paths = discovered_assets.get(t) or []
         for p in paths[:max_files_per_type]:
             entry = extract_references(p, t)

@@ -12,7 +12,7 @@ Step-by-step commands with full syntax. Add a screenshot below each example if d
 unveil --version
 ```
 
-Displays the installed Unveil version (e.g. `Unveil RADAR v0.6.0`).
+Displays the installed Unveil version (e.g. `Unveil RADAR v0.7.0`).
 
 ---
 
@@ -22,7 +22,7 @@ Displays the installed Unveil version (e.g. `Unveil RADAR v0.6.0`).
 unveil -h
 ```
 
-Lists all flags: `-C` (target), `-e`, `-O`, `-f`, `-q`, `-xh`, `-xj`, `-xx`.
+Lists all flags: `-C` (target), `-e`, `-O`, `-f`, `-q`, `-V`, `--max-files`, `--max-size-mb`, `--max-per-type`, `-xh`, `-xj`, `-xx`, `-xs`, `--baseline`, `--cve`.
 
 ---
 

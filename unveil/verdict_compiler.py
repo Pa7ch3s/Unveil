@@ -9,7 +9,7 @@ ROLE_WEIGHTS = {
     "BLADE": 0.35
 }
 
-def compile(synth, surfaces, findings):
+def compile(synth, surfaces, findings, offensive=True):
     roles = {}
     families = set()
     cwe = set()
@@ -53,6 +53,9 @@ def compile(synth, surfaces, findings):
         "bridge_candidates": bridges
     }
 
-    verdict["hunt_plan"] = infer_missing_links(missing)
+    if offensive:
+        verdict["hunt_plan"] = infer_missing_links(missing)
+    else:
+        verdict["hunt_plan"] = []
 
     return verdict

@@ -4,6 +4,7 @@ import tempfile
 import shutil
 import json
 import math
+import xml.etree.ElementTree as ET
 
 try:
     import lief
@@ -14,6 +15,13 @@ try:
     import pefile
 except Exception:
     pefile = None
+
+
+_analysis_cache = {}
+def clear_analysis_cache():
+    """Clear per-run analysis cache (call at start of run())."""
+    global _analysis_cache
+    _analysis_cache = {}
 
 
 def _run(cmd):
@@ -40,6 +48,15 @@ def _is_pe(path):
 
 
 def _collect_macho_imports(path):
+    if lief:
+        try:
+            binary = lief.parse(path)
+            if binary is None:
+                raise RuntimeError("lief returned None")
+            libs = getattr(binary, "libraries", []) or []
+            return sorted(set(str(l) for l in libs))
+        except Exception:
+            pass
     imports = set()
     out = _run(["otool", "-L", path])
     for line in out.splitlines()[1:]:
@@ -50,6 +67,15 @@ def _collect_macho_imports(path):
 
 
 def _collect_elf_imports(path):
+    if lief:
+        try:
+            binary = lief.parse(path)
+            if binary is None:
+                raise RuntimeError("lief returned None")
+            libs = getattr(binary, "imported_libraries", []) or []
+            return sorted(set(str(l) for l in libs))
+        except Exception:
+            pass
     imports = set()
     out = _run(["ldd", path])
     for line in out.splitlines():
@@ -153,15 +179,21 @@ def imports(target):
     else:
         info = _inspect_binary(target)
         if not info:
-            raise RuntimeError("Unsupported or non-binary file")
-
-        results.append(
-            {
-                "path": os.path.basename(target),
-                "binary": info["type"],
-                "imports": info["imports"],
-            }
-        )
+            # Non-binary (e.g. .js script): return minimal structure so classifier can still run
+            base = os.path.basename(target)
+            results.append({
+                "path": base,
+                "binary": "script",
+                "imports": [],
+            })
+        else:
+            results.append(
+                {
+                    "path": os.path.basename(target),
+                    "binary": info["type"],
+                    "imports": info["imports"],
+                }
+            )
 
     return results
 
@@ -196,19 +228,64 @@ def entropy(target):
     return round(ent, 4)
 
 
+RT_MANIFEST = 24  # Windows resource type for embedded app manifest
+
+
+def _pe_embedded_manifest(path):
+    """Extract embedded application manifest from PE (requestedExecutionLevel, etc.). Returns dict or None."""
+    if not pefile or not _is_pe(path):
+        return None
+    try:
+        pe = pefile.PE(path)
+        if not hasattr(pe, "DIRECTORY_ENTRY_RESOURCE"):
+            return None
+        for entry in pe.DIRECTORY_ENTRY_RESOURCE.entries:
+            if getattr(entry, "id", None) == RT_MANIFEST:
+                for sub in entry.directory.entries:
+                    try:
+                        data_rva = sub.data.struct.OffsetToData
+                        size = sub.data.struct.Size
+                        img = pe.get_memory_mapped_image()
+                        manifest_bytes = img[data_rva : data_rva + size]
+                        root = ET.fromstring(manifest_bytes)
+                        out = {"target": os.path.basename(path), "requestedExecutionLevel": None}
+                        for elem in root.iter():
+                            if "requestedExecutionLevel" in (elem.tag or ""):
+                                out["requestedExecutionLevel"] = elem.get("level") or ""
+                                break
+                        return out
+                    except Exception:
+                        continue
+                break
+    except Exception:
+        pass
+    return None
+
+
 def manifest(target):
+    """Extract manifest metadata. PE: embedded app manifest (requestedExecutionLevel). Other formats: stub."""
+    if not os.path.exists(target):
+        return {"target": os.path.basename(target), "error": "file not found"}
+    man = _pe_embedded_manifest(target)
+    if man:
+        return man
     return {
-        "note": "Manifest extraction not implemented yet",
         "target": os.path.basename(target),
+        "note": "Manifest extraction only implemented for PE (embedded manifest)",
     }
 
 
 def analyze(target):
+    try:
+        key = os.path.abspath(target)
+    except Exception:
+        key = target
+    if key in _analysis_cache:
+        return _analysis_cache[key]
     result = {
         "target": os.path.basename(target),
         "imports": imports(target),
     }
-
     try:
         result["entropy"] = entropy(target)
     except Exception:
@@ -220,6 +297,14 @@ def analyze(target):
     except Exception:
         result["dotnet"] = False
 
+    # Tag runtime (Go, Rust, PyInstaller) from file output for CVE/search
+    try:
+        ft = _run(["file", "-b", target])
+        result["file_type"] = ft or ""
+    except Exception:
+        result["file_type"] = ""
+
+    _analysis_cache[key] = result
     return result
 
 
