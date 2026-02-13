@@ -8,6 +8,7 @@ from unveil import config as _config
 from unveil.electron_info import get_electron_info
 from unveil.chainability import build_chainability
 from unveil.checklist_scan import run_checklist
+from unveil.attack_graph import build_attack_graph
 from pathlib import Path
 import sys
 import tempfile
@@ -648,6 +649,7 @@ def run(
             "electron_info": get_electron_info(discovered_assets),
             "chainability": build_chainability(extracted_refs, discovered_assets),
             "checklist_findings": run_checklist(discovered_assets),
+            "attack_graph": build_attack_graph(verdict, build_chainability(extracted_refs, discovered_assets), extracted_refs, discovered_html_apk),
         }
 
     # -------- JAR/WAR Mode: unpack and report manifest --------
@@ -699,6 +701,7 @@ def run(
             "electron_info": {},
             "chainability": build_chainability(extracted_refs_jar, discovered_assets_jar),
             "checklist_findings": run_checklist(discovered_assets_jar),
+            "attack_graph": build_attack_graph(verdict, build_chainability(extracted_refs_jar, discovered_assets_jar), extracted_refs_jar, list(discovered_assets_jar.get("html") or [])),
         }
 
     # -------- Single File Mode (non-DMG file) --------
@@ -734,6 +737,7 @@ def run(
             "electron_info": {},
             "chainability": [],
             "checklist_findings": checklist_single,
+            "attack_graph": {"chains": [], "sendable_urls": []},
         }
 
     # -------- Directory Mode (or mounted DMG) --------
@@ -782,6 +786,7 @@ def run(
     extracted_refs = asset_discovery.run_reference_extraction(
         discovered_assets, max_files_per_type=ref_extract_max
     )
+    chainability = build_chainability(extracted_refs, discovered_assets)
     return {
         "metadata": {"target": target},
         "results": results,
@@ -793,6 +798,7 @@ def run(
         "discovered_html": discovered_html,
         "extracted_refs": extracted_refs,
         "electron_info": get_electron_info(discovered_assets),
-        "chainability": build_chainability(extracted_refs, discovered_assets),
+        "chainability": chainability,
         "checklist_findings": run_checklist(discovered_assets),
+        "attack_graph": build_attack_graph(verdict, chainability, extracted_refs, discovered_html),
     }

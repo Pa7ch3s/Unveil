@@ -5,6 +5,8 @@ import burp.api.montoya.logging.Logging;
 import burp.api.montoya.scanner.audit.issues.AuditIssue;
 import burp.api.montoya.scanner.audit.issues.AuditIssueConfidence;
 import burp.api.montoya.scanner.audit.issues.AuditIssueSeverity;
+import burp.api.montoya.http.message.requests.HttpRequest;
+import burp.api.montoya.repeater.Repeater;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -81,6 +83,11 @@ public class UnveilTab {
     private final JTable electronInfoTable;
     private final DefaultTableModel checklistModel;
     private final JTable checklistTable;
+    private final DefaultTableModel attackGraphChainsModel;
+    private final JTable attackGraphChainsTable;
+    private final DefaultTableModel sendableUrlsModel;
+    private final JTable sendableUrlsTable;
+    private final JButton sendToRepeaterBtn;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private static final String PREFS_NODE = "unveil-burp";
     private static final int RECENT_TARGETS_MAX = 5;
@@ -390,6 +397,32 @@ public class UnveilTab {
         checklistTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         checklistTable.setAutoCreateRowSorter(true);
         resultsTabs.addTab("Checklist", new JScrollPane(checklistTable));
+
+        // Attack graph: chains + sendable URLs (one-click Send to Repeater)
+        this.attackGraphChainsModel = new DefaultTableModel(new String[] { "Missing role", "Surface", "Hunt targets", "Reason" }, 0);
+        this.attackGraphChainsTable = new JTable(attackGraphChainsModel);
+        attackGraphChainsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        attackGraphChainsTable.setAutoCreateRowSorter(true);
+        this.sendableUrlsModel = new DefaultTableModel(new String[] { "URL", "Source", "Label" }, 0);
+        this.sendableUrlsTable = new JTable(sendableUrlsModel);
+        sendableUrlsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        sendableUrlsTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        this.sendToRepeaterBtn = new JButton("Send selected to Repeater");
+        sendToRepeaterBtn.setToolTipText("Create a Repeater tab for each selected http(s) URL (or all if none selected)");
+        sendToRepeaterBtn.addActionListener(e -> sendSelectedToRepeater());
+        JPanel attackGraphPanel = new JPanel(new BorderLayout(4, 4));
+        JPanel chainsPanel = new JPanel(new BorderLayout());
+        chainsPanel.add(new JLabel("Chains: missing role → surface → hunt targets"), BorderLayout.NORTH);
+        chainsPanel.add(new JScrollPane(attackGraphChainsTable), BorderLayout.CENTER);
+        JPanel sendablePanel = new JPanel(new BorderLayout(4, 4));
+        JPanel sendableToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        sendableToolbar.add(new JLabel("Sendable URLs (from refs / hunt plan):"));
+        sendableToolbar.add(sendToRepeaterBtn);
+        sendablePanel.add(sendableToolbar, BorderLayout.NORTH);
+        sendablePanel.add(new JScrollPane(sendableUrlsTable), BorderLayout.CENTER);
+        attackGraphPanel.add(chainsPanel, BorderLayout.NORTH);
+        attackGraphPanel.add(sendablePanel, BorderLayout.CENTER);
+        resultsTabs.addTab("Attack graph", attackGraphPanel);
 
         this.rawJsonArea = new JTextArea(18, 80);
         rawJsonArea.setEditable(false);
@@ -1026,6 +1059,44 @@ public class UnveilTab {
                     }
                 }
             }
+            attackGraphChainsModel.setRowCount(0);
+            sendableUrlsModel.setRowCount(0);
+            if (report.has("attack_graph")) {
+                JsonObject ag = report.getAsJsonObject("attack_graph");
+                if (ag != null) {
+                    if (ag.has("chains")) {
+                        JsonArray chains = ag.getAsJsonArray("chains");
+                        if (chains != null) {
+                            for (JsonElement el : chains) {
+                                if (el.isJsonObject()) {
+                                    JsonObject row = el.getAsJsonObject();
+                                    attackGraphChainsModel.addRow(new Object[] {
+                                        str(row.get("missing_role")),
+                                        str(row.get("suggested_surface")),
+                                        str(row.get("hunt_targets")),
+                                        str(row.get("reason"))
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    if (ag.has("sendable_urls")) {
+                        JsonArray urls = ag.getAsJsonArray("sendable_urls");
+                        if (urls != null) {
+                            for (JsonElement el : urls) {
+                                if (el.isJsonObject()) {
+                                    JsonObject row = el.getAsJsonObject();
+                                    sendableUrlsModel.addRow(new Object[] {
+                                        str(row.get("url")),
+                                        str(row.get("source")),
+                                        str(row.get("label"))
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             addFindingsToTarget(report);
         } catch (Exception e) {
             logging.logToError("Unveil report parse error: " + e.getMessage());
@@ -1107,6 +1178,48 @@ public class UnveilTab {
             case "LOW": return AuditIssueSeverity.LOW;
             default: return AuditIssueSeverity.MEDIUM;
         }
+    }
+
+    private void sendSelectedToRepeater() {
+        int[] rows = sendableUrlsTable.getSelectedRows();
+        List<String> urls = new ArrayList<>();
+        if (rows != null && rows.length > 0) {
+            for (int viewRow : rows) {
+                int modelRow = sendableUrlsTable.convertRowIndexToModel(viewRow);
+                Object urlObj = sendableUrlsModel.getValueAt(modelRow, 0);
+                Object labelObj = sendableUrlsModel.getValueAt(modelRow, 2);
+                if (urlObj != null) {
+                    String u = urlObj.toString().trim();
+                    if (u.startsWith("http://") || u.startsWith("https://")) urls.add(u);
+                }
+            }
+        } else {
+            for (int i = 0; i < sendableUrlsModel.getRowCount(); i++) {
+                Object urlObj = sendableUrlsModel.getValueAt(i, 0);
+                if (urlObj != null) {
+                    String u = urlObj.toString().trim();
+                    if (u.startsWith("http://") || u.startsWith("https://")) urls.add(u);
+                }
+            }
+        }
+        if (urls.isEmpty()) {
+            statusLabel.setText("No http(s) URLs to send.");
+            return;
+        }
+        Repeater repeater = api.repeater();
+        int sent = 0;
+        for (int i = 0; i < urls.size(); i++) {
+            String url = urls.get(i);
+            try {
+                HttpRequest request = HttpRequest.httpRequestFromUrl(url);
+                String tabName = "Unveil " + (i + 1);
+                repeater.sendToRepeater(request, tabName);
+                sent++;
+            } catch (Exception e) {
+                logging.logToError("Send to Repeater failed for " + url + ": " + e.getMessage());
+            }
+        }
+        statusLabel.setText("Sent " + sent + " request(s) to Repeater.");
     }
 
     private static String str(JsonElement el) {

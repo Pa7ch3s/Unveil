@@ -4,6 +4,14 @@
 
 - (None.)
 
+## [0.8.0] — 2026-02-13
+
+- **Attack graph** — Report includes `attack_graph` (chains + sendable_urls). Burp: Attack graph tab; **Send selected to Repeater** for one-click Repeater tabs per URL.
+
+## [0.4.0] — unveil-burp (Burp Suite extension) — 2026-02-13
+
+- **Attack graph tab** — Chains (missing role → surface → hunt targets → reason) and sendable URLs table. **Send selected to Repeater** creates a Repeater tab per http(s) URL.
+
 ## [0.7.0] — 2026-02-13
 
 - **Extended mode (-e)** — Populates enum from plists (ATS/NSExceptionDomains) and helper/crashpad paths; reasoning layer can emit network_mitm and ipc_helper surfaces when data is present.

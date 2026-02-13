@@ -2,7 +2,7 @@
 
 Adds an **Unveil** tab to Burp Suite: scan apps/binaries for attack surfaces, set CLI options or use the **daemon**, and view rich results (Summary, Hunt plan, Electron info, Chainability, Extracted refs, Possible CVEs, Discovered assets, Raw JSON) with Copy / Save / Export HTML / **Export SARIF**.
 
-## What’s in the tab (v0.3.0)
+## What’s in the tab (v0.4.0)
 
 - **Path** — Target to scan: directory, `.app`, `.exe`, `.dmg`, `.ipa`, `.apk`, `.jar`/`.war`, or file. **Browse…** to pick.
 - **Scan** — Runs the Unveil CLI (or **daemon** if enabled) with the path and options; results appear below.
@@ -11,7 +11,7 @@ Adds an **Unveil** tab to Burp Suite: scan apps/binaries for attack surfaces, se
 - **Limits** — **Max files**, **Max size (MB)**, **Max per type** (CLI `--max-files`, `--max-size-mb`, `--max-per-type`). Used for both CLI and daemon.
 - **Baseline (optional)** — Path to a baseline report JSON; passed as `--baseline` for diff (added/removed findings, verdict changed). Summary shows diff when present.
 - **Unveil executable (optional)** — Override path to the `unveil` binary when not using daemon. **Unveil CLI:** label shows detected version.
-- **Results tabs** — **Summary** (verdict, electron/chainability/CVE counts, baseline diff), **Hunt plan**, **Discovered HTML**, **Discovered assets** (incl. **env**), **Electron info**, **Chainability**, **Extracted refs**, **Possible CVEs**, **Checklist** (potential secrets/static-analysis no-nos), **Raw JSON**.
+- **Results tabs** — **Summary**, **Hunt plan**, **Discovered HTML**, **Discovered assets**, **Electron info**, **Chainability**, **Extracted refs**, **Possible CVEs**, **Checklist**, **Attack graph** (chains: role → surface → hunt targets; sendable URLs with **Send selected to Repeater**), **Raw JSON**.
 - **Copy JSON** / **Save JSON…** / **Save compact JSON…** / **Export HTML…** / **Export SARIF…** — Export SARIF runs `unveil -q -xs <file>` for CI/IDE.
 - **Persistent settings** — Unveil path, daemon URL, option checkboxes, limits, and baseline path are saved and restored across Burp restarts (Java Preferences).
 - **Rescan last** — Re-run the last target (CLI or daemon).
@@ -43,13 +43,13 @@ cd unveil-burp
 ./gradlew jar
 ```
 
-The JAR is written to `build/libs/unveil-burp-0.3.0.jar`.
+The JAR is written to `build/libs/unveil-burp-0.4.0.jar`.
 
 ## Load in Burp
 
 1. Open Burp Suite (2023.8+ for Montoya API).
 2. **Extensions** → **Installed** → **Add** → **Extension type: Java**.
-3. Select `build/libs/unveil-burp-0.3.0.jar`.
+3. Select `build/libs/unveil-burp-0.4.0.jar`.
 4. The **Unveil** tab appears; if scan fails with “unveil not found”, set **Unveil executable (optional)** to the path from `which unveil`.
 
 ## Compressing the JSON output
@@ -58,7 +58,7 @@ The JAR is written to `build/libs/unveil-burp-0.3.0.jar`.
 - **Hunt plan** tab shows a table: one row per suggestion (missing role, suggested surface, hunt targets, reason). Sortable and scannable.
 - **Raw JSON** remains available for tooling or archival; **Copy JSON** / **Save JSON…** / **Save compact JSON…** for sharing or CI.
 
-## Implemented (v0.3.0)
+## Implemented (v0.4.0)
 
 - **Persistent settings** — Java Preferences: unveil path, daemon URL, use daemon, option checkboxes, limits, baseline path (saved on successful scan).
 - **Daemon mode** — **Use daemon** + URL; `POST /scan` with JSON body (target, extended, offensive, max_files, max_size_mb, max_per_type). No CLI spawn.
@@ -69,10 +69,11 @@ The JAR is written to `build/libs/unveil-burp-0.3.0.jar`.
 - **Limits & baseline** — UI for `--max-files`, `--max-size-mb`, `--max-per-type`, `--baseline`; **env** in Discovered assets type filter.
 - **Version label** — Parses “Unveil RADAR vX.Y.Z” from CLI output (handles multi-line banner).
 - **UI dedupe** — Discovered assets and extracted refs tables dedupe when populating from report (no duplicate rows).
+- **Attack graph** — Chains (missing role → surface → hunt targets → reason) and sendable URLs (http(s) from refs/hunt plan). **Send selected to Repeater** creates a Repeater tab per URL for one-click testing.
 
 ## Forward-thinking additions
 
-1. **Send to Repeater/Intruder** — Send selected hunt target or path to Repeater/Intruder.
+1. **Send to Intruder** — Send selected URL or hunt target to Intruder (Repeater already implemented).
 2. **Report templates** — Markdown or PDF export with branding.
 3. **Context and remediation** — Tooltips linking suggested_surface to CWE/CVE and mitigation.
 4. **Scan history** — List of recent scans (path + timestamp) and re-open last report without re-scanning.
