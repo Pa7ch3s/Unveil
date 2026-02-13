@@ -8,9 +8,10 @@ version = "0.7.0"
 requires-python = ">=3.9"
 dependencies = ["pygments", "lief","pefile","fastapi","uvicorn","python-multipart"]
 authors = [{name="pa7ch3s"}]
+readme = "README.md"
+
 [project.optional-dependencies]
 test = ["pytest>=7"]
-readme = "README.md"
 
 
 [tool.setuptools.packages.find]
