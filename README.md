@@ -4,11 +4,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://github.com/Pa7ch3s/Unveil)
 
-## Unveil
-
-Attack Path Discovery Engine
-
->*From binary to breach path.*
 ---
 **Opaque binaries in. Attack surfaces out.**
 ---
