@@ -12,7 +12,11 @@ def export(json_path, mode):
         print("Exported:", out)
 
     elif mode == "html":
-        render_html(json_path)
+        report = json.loads(json_path.read_text())
+        html = render_html(report)
+        out = json_path.with_suffix(".html")
+        out.write_text(html)
+        print("Exported:", out)
 
     else:
         raise ValueError("Unknown export mode")

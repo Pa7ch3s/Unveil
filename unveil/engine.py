@@ -1,18 +1,30 @@
 from unveil.classifier import classify
-from unveil.static_parser import analyze
+from unveil.static_parser import analyze, clear_analysis_cache
 from unveil.surface_expander import expand
 from unveil.surface_synth import synthesize
 from unveil.verdict_compiler import compile
 from unveil import asset_discovery
+from unveil import config as _config
+from unveil.electron_info import get_electron_info
+from unveil.chainability import build_chainability
 from pathlib import Path
 import sys
 import tempfile
 import subprocess
 import shutil
 import zipfile
+import plistlib
 
 MAX_FILES = 80
 MAX_SIZE = 120 * 1024 * 1024
+
+
+def _resolve_limits(max_files=None, max_size_mb=None, max_per_type=None):
+    """Apply env/override to module limits for this run."""
+    global MAX_FILES, MAX_SIZE
+    MAX_FILES = _config.get_max_files(max_files)
+    MAX_SIZE = _config.get_max_size_bytes(max_size_mb)
+    asset_discovery.MAX_PER_TYPE = _config.get_max_per_type(max_per_type)
 
 SKIP_DIRS = {
     "Xcode.app",
@@ -50,6 +62,31 @@ POWER_CHAIN = {
 def tick(msg):
     sys.stderr.write(msg + "\n")
     sys.stderr.flush()
+
+
+def _build_extended_enum(discovered_assets, results):
+    """Build enum dict for expand(): ATS (NSExceptionDomains from plists), helpers (Electron helper/crashpad paths)."""
+    enum = {"helpers": [], "ATS": {"NSExceptionDomains": {}}}
+    if not results:
+        pass
+    else:
+        for r in results:
+            path = (r.get("file") or "").lower()
+            if "helper" in path or "crashpad" in path:
+                enum["helpers"].append(r.get("file"))
+    plist_paths = (discovered_assets or {}).get("plist") or []
+    for path in plist_paths[:50]:
+        try:
+            with open(path, "rb") as f:
+                data = plistlib.load(f)
+            ats = data.get("NSAppTransportSecurity") or {}
+            domains = ats.get("NSExceptionDomains") or {}
+            for k, v in domains.items():
+                enum["ATS"]["NSExceptionDomains"][k] = v if isinstance(v, dict) else {}
+        except Exception:
+            pass
+    return enum
+
 
 # ------------------------------------------------------------
 # Phase 1 – Normalize Surface Buckets
@@ -176,6 +213,10 @@ def harvest_apk(unpacked_root, results, count_ref):
 WINDOWS_PERSISTENCE_EXTS = {".xml", ".vbs", ".bat", ".ps1", ".cmd", ".lnk"}
 WINDOWS_PERSISTENCE_PATH_PARTS = ("tasks", "scheduled", "schedule", "startup", "run", "runonce", "winlogon", "scripts", "services")
 
+# Linux persistence: systemd, cron, autostart
+LINUX_PERSISTENCE_EXTS = {".service", ".timer", ".desktop"}
+LINUX_PERSISTENCE_PATH_PARTS = ("systemd", "cron", "crontab", "autostart", "startup")
+
 
 def harvest_directory_binaries(base, results, count_ref):
     """When there are no .app bundles (e.g. Windows app dir), harvest .exe/.dll/.so/etc. from the tree."""
@@ -236,6 +277,39 @@ def harvest_windows_persistence(base, results, count_ref):
         }
         entry["class"] = classify(entry)
         if "windows_persistence" in (entry["class"].get("surfaces") or []):
+            results.append(entry)
+            count_ref[0] += 1
+
+
+def harvest_linux_persistence(base, results, count_ref):
+    """Harvest Linux persistence artifacts (systemd units, cron, autostart .desktop)."""
+    base = Path(base)
+    if not base.is_dir():
+        return
+    for item in base.rglob("*"):
+        if count_ref[0] >= MAX_FILES:
+            return
+        if not item.is_file():
+            continue
+        p = str(item).lower()
+        ext = item.suffix.lower()
+        if ext in LINUX_PERSISTENCE_EXTS and any(part in p for part in LINUX_PERSISTENCE_PATH_PARTS):
+            pass
+        elif ext == ".desktop" and ("autostart" in p or "startup" in p):
+            pass
+        else:
+            continue
+        tick(f"    └─ {item.relative_to(base)}")
+        entry = {
+            "file": str(item),
+            "analysis": {
+                "target": item.name,
+                "imports": [{"path": item.name, "binary": "config", "imports": []}],
+                "entropy": 0.0,
+            },
+        }
+        entry["class"] = classify(entry)
+        if "linux_persistence" in (entry["class"].get("surfaces") or []):
             results.append(entry)
             count_ref[0] += 1
 
@@ -359,14 +433,14 @@ def harvest_bundle(bundle, base, results, count_ref, discovered_assets=None):
             entry["class"] = classify(entry)
             results.append(entry)
             count_ref[0] += 1
-        except:
+        except Exception:
             pass
 
 # ------------------------------------------------------------
 # Phase 4 – Reasoning Pipeline
 # ------------------------------------------------------------
 
-def build_reasoning(results):
+def build_reasoning(results, extended=False, offensive=True, discovered_assets=None):
     """
     Bridge classifier output into the reasoning layer.
 
@@ -378,6 +452,10 @@ def build_reasoning(results):
 
     Here we fan out one indicator per relevant surface / exploit tag so that
     `expand` and `EXPLOIT_FAMILIES` can light up findings and synth indicators.
+
+    extended: when True, pass richer enum (e.g. ATS/helpers) into expand for deeper surface expansion.
+    offensive: when True, run full exploit-chain synthesis and hunt plan (default True for -O).
+    discovered_assets: optional dict of asset type -> paths; used when extended=True to build enum.
     """
     indicators = []
 
@@ -410,6 +488,10 @@ def build_reasoning(results):
                 codes.add("WINDOWS_PERSISTENCE")
             elif surf == "dotnet_managed":
                 codes.add("DOTNET_MANAGED")
+            elif surf == "linux_persistence":
+                codes.add("LINUX_PERSISTENCE")
+            elif surf == "jar_archive":
+                codes.add("JAR_ARCHIVE")
 
         # Exploit tags may also directly correspond to expansion classes.
         for ex in exploits:
@@ -423,23 +505,37 @@ def build_reasoning(results):
                 "MACOS_LAUNCH_PERSISTENCE",
                 "WINDOWS_PERSISTENCE",
                 "DOTNET_MANAGED",
+                "LINUX_PERSISTENCE",
+                "JAR_ARCHIVE",
             }:
                 codes.add(ex)
 
         for code in codes:
             indicators.append({"class": code, "file": file_path})
 
-    surfaces = expand(indicators, {})
+    enum = _build_extended_enum(discovered_assets, results) if (extended and discovered_assets is not None) else {}
+    surfaces = expand(indicators, enum)
     findings = normalize_surfaces(surfaces)
     synth = synthesize(surfaces)
-    verdict = compile(synth, surfaces, findings)
+    verdict = compile(synth, surfaces, findings, offensive=offensive)
     return findings, synth, verdict
 
 # ------------------------------------------------------------
 # Phase 5 – Main Entry
 # ------------------------------------------------------------
 
-def run(target):
+def run(
+    target,
+    extended=False,
+    offensive=True,
+    max_files=None,
+    max_size_mb=None,
+    max_per_type=None,
+    ref_extract_max_files=None,
+):
+    _resolve_limits(max_files=max_files, max_size_mb=max_size_mb, max_per_type=max_per_type)
+    ref_extract_max = _config.get_ref_extract_max_files(ref_extract_max_files)
+    clear_analysis_cache()
     base = Path(target)
     results = []
     unmount_dmg = None
@@ -455,6 +551,8 @@ def run(target):
         )
         if r.returncode != 0 or not Path(mount_dir).is_dir():
             shutil.rmtree(mount_dir, ignore_errors=True)
+            err = (r.stderr or r.stdout or "").strip() or "unknown"
+            _config.log("error", "DMG mount failed", target=target, stderr=err)
             tick("[DMG] mount failed")
             return {
                 "metadata": {"target": target},
@@ -466,6 +564,8 @@ def run(target):
                 "discovered_assets": {},
                 "discovered_html": [],
                 "extracted_refs": [],
+                "electron_info": {},
+                "chainability": [],
             }
         base = Path(mount_dir)
         unmount_dmg = mount_dir
@@ -477,6 +577,7 @@ def run(target):
         tick(f"[IPA] {base.name}")
         tmp, root = _unpack_zip(base, "Payload")
         if root is None or not root.is_dir():
+            _config.log("error", "IPA unpack failed", target=target)
             tick("[IPA] unpack failed")
             return {
                 "metadata": {"target": target},
@@ -488,6 +589,8 @@ def run(target):
                 "discovered_assets": {},
                 "discovered_html": [],
                 "extracted_refs": [],
+                "electron_info": {},
+                "chainability": [],
             }
         base = root
         unpack_dir = tmp
@@ -497,6 +600,7 @@ def run(target):
         tick(f"[APK] {base.name}")
         tmp, root = _unpack_zip(base, None)
         if root is None or not root.is_dir():
+            _config.log("error", "APK unpack failed", target=target)
             tick("[APK] unpack failed")
             return {
                 "metadata": {"target": target},
@@ -508,6 +612,8 @@ def run(target):
                 "discovered_assets": {},
                 "discovered_html": [],
                 "extracted_refs": [],
+                "electron_info": {},
+                "chainability": [],
             }
         base = root
         unpack_dir = tmp
@@ -517,9 +623,13 @@ def run(target):
         discovered_assets = _empty_discovered_assets()
         asset_discovery.collect_discovered_assets(base, discovered_assets)
         discovered_html_apk = list(discovered_assets.get("html") or [])
-        extracted_refs = asset_discovery.run_reference_extraction(discovered_assets)
+        extracted_refs = asset_discovery.run_reference_extraction(
+            discovered_assets, max_files_per_type=ref_extract_max
+        )
         tick("[DONE]")
-        findings, synth, verdict = build_reasoning(results)
+        findings, synth, verdict = build_reasoning(
+            results, extended=extended, offensive=offensive, discovered_assets=discovered_assets
+        )
         if unpack_dir:
             shutil.rmtree(unpack_dir, ignore_errors=True)
         return {
@@ -532,6 +642,58 @@ def run(target):
             "discovered_assets": discovered_assets,
             "discovered_html": discovered_html_apk,
             "extracted_refs": extracted_refs,
+            "electron_info": get_electron_info(discovered_assets),
+            "chainability": build_chainability(extracted_refs, discovered_assets),
+        }
+
+    # -------- JAR/WAR Mode: unpack and report manifest --------
+    if base.is_file() and base.suffix.lower() in (".jar", ".war") and not unmount_dmg:
+        tick(f"[JAR] {base.name}")
+        tmp = tempfile.mkdtemp(prefix="unveil_jar_")
+        try:
+            with zipfile.ZipFile(base, "r") as z:
+                z.extractall(tmp)
+            root = Path(tmp)
+            manifest_path = root / "META-INF" / "MANIFEST.MF"
+            manifest_note = "no META-INF/MANIFEST.MF"
+            if manifest_path.is_file():
+                try:
+                    manifest_note = manifest_path.read_text(encoding="utf-8", errors="ignore")[:2000]
+                except Exception:
+                    pass
+            entry = {
+                "file": str(base),
+                "analysis": {
+                    "target": base.name,
+                    "imports": [{"path": base.name, "binary": "jar", "imports": []}],
+                    "entropy": 0.0,
+                },
+                "class": {"surfaces": ["jar_archive"], "exploits": ["JAR_ARCHIVE"]},
+            }
+            discovered_assets_jar = _empty_discovered_assets()
+            for item in root.rglob("*"):
+                if item.is_file():
+                    _add_to_discovered_assets(item, discovered_assets_jar)
+            findings, synth, verdict = build_reasoning(
+                [entry], extended=False, offensive=offensive
+            )
+            extracted_refs_jar = asset_discovery.run_reference_extraction(
+                discovered_assets_jar, max_files_per_type=ref_extract_max
+            )
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        return {
+            "metadata": {"target": target},
+            "results": [entry],
+            "verdict": verdict,
+            "findings": findings,
+            "surfaces": findings,
+            "synth_indicators": synth,
+            "discovered_assets": discovered_assets_jar,
+            "discovered_html": list(discovered_assets_jar.get("html") or []),
+            "extracted_refs": extracted_refs_jar,
+            "electron_info": {},
+            "chainability": build_chainability(extracted_refs_jar, discovered_assets_jar),
         }
 
     # -------- Single File Mode (non-DMG file) --------
@@ -542,9 +704,7 @@ def run(target):
             "analysis": analyze(str(base))
         }
         entry["class"] = classify(entry)
-        surfaces_single = [{"surface": entry["class"], "path": entry["file"]}]
-        synth = synthesize(surfaces_single)
-        verdict = compile(synth, [], [])
+        findings, synth, verdict = build_reasoning([entry], extended=False, offensive=offensive)
         discovered_assets = _empty_discovered_assets()
         if base.suffix.lower() in (".html", ".htm"):
             discovered_assets["html"] = [str(base.resolve())]
@@ -553,12 +713,14 @@ def run(target):
             "metadata": {"target": target},
             "results": [entry],
             "verdict": verdict,
-            "findings": [],
-            "surfaces": [],
+            "findings": findings,
+            "surfaces": findings,
             "synth_indicators": synth,
             "discovered_assets": discovered_assets,
             "discovered_html": discovered_html_single,
             "extracted_refs": [],
+            "electron_info": {},
+            "chainability": [],
         }
 
     # -------- Directory Mode (or mounted DMG) --------
@@ -588,10 +750,14 @@ def run(target):
 
     # Windows persistence: harvest Tasks/Startup/Run/Scripts artifacts when scanning a directory
     harvest_windows_persistence(base, results, count_ref)
+    # Linux persistence: systemd, cron, autostart
+    harvest_linux_persistence(base, results, count_ref)
 
     # -------- Reasoning --------
     tick("[DONE]")
-    findings, synth, verdict = build_reasoning(results)
+    findings, synth, verdict = build_reasoning(
+        results, extended=extended, offensive=offensive, discovered_assets=discovered_assets
+    )
 
     if unmount_dmg:
         subprocess.run(["hdiutil", "detach", unmount_dmg], capture_output=True)
@@ -600,7 +766,9 @@ def run(target):
         shutil.rmtree(unpack_dir, ignore_errors=True)
 
     discovered_html = list(discovered_assets.get("html") or [])
-    extracted_refs = asset_discovery.run_reference_extraction(discovered_assets)
+    extracted_refs = asset_discovery.run_reference_extraction(
+        discovered_assets, max_files_per_type=ref_extract_max
+    )
     return {
         "metadata": {"target": target},
         "results": results,
@@ -611,4 +779,6 @@ def run(target):
         "discovered_assets": discovered_assets,
         "discovered_html": discovered_html,
         "extracted_refs": extracted_refs,
+        "electron_info": get_electron_info(discovered_assets),
+        "chainability": build_chainability(extracted_refs, discovered_assets),
     }

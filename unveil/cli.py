@@ -17,7 +17,7 @@ def main():
         epilog="Disclaimer: This tool is for educational purposes and authorized security testing only. Unauthorized use against systems without prior written consent is strictly prohibited. The author accepts no liability for misuse or damage."
     )
 
-    p.add_argument("--version", action="version", version="Unveil RADAR v0.6.0")
+    p.add_argument("--version", action="version", version="Unveil RADAR v0.7.0")
 
     p.add_argument("-C", "--target", required=True,
                    help="Target directory or application bundle to analyze")
@@ -34,6 +34,18 @@ def main():
     p.add_argument("-q", "--quiet", action="store_true",
                    help="Suppress banner and pretty rendering")
 
+    p.add_argument("-V", "--verbose", action="store_true",
+                   help="Enable structured JSON log to stderr (or set UNVEIL_LOG=1)")
+
+    p.add_argument("--max-files", type=int, metavar="N", default=None,
+                   help="Max binaries to analyze (default: 80; env UNVEIL_MAX_FILES)")
+
+    p.add_argument("--max-size-mb", type=int, metavar="MB", default=None,
+                   help="Max file size in MB (default: 120; env UNVEIL_MAX_SIZE_MB)")
+
+    p.add_argument("--max-per-type", type=int, metavar="N", default=None,
+                   help="Max discovered assets per type (default: 500; env UNVEIL_MAX_PER_TYPE)")
+
     p.add_argument("-xh", metavar="FILE",
                    help="Export pretty rendered report to HTML")
 
@@ -43,9 +55,42 @@ def main():
     p.add_argument("-xx", metavar="FILE",
                    help="Export compact raw JSON report")
 
+    p.add_argument("-xs", metavar="FILE",
+                   help="Export SARIF 2.1 report to FILE (for CI/IDE)")
+
+    p.add_argument("--baseline", metavar="FILE",
+                   help="Baseline report JSON; add diff and baseline_suppressed to output")
+
+    p.add_argument("--cve", action="store_true",
+                   help="Add possible_cves (suggested hunt queries from verdict) to report")
+
     args = p.parse_args()
 
-    report = run(args.target)
+    if args.verbose:
+        import os
+        os.environ["UNVEIL_LOG"] = "1"
+
+    report = run(
+        args.target,
+        extended=args.e,
+        offensive=args.O,
+        max_files=args.max_files,
+        max_size_mb=args.max_size_mb,
+        max_per_type=args.max_per_type,
+    )
+
+    if getattr(args, "baseline", None):
+        try:
+            baseline = json.loads(Path(args.baseline).read_text())
+            from unveil.report_diff import apply_baseline
+            report = apply_baseline(report, baseline)
+        except Exception:
+            pass
+
+    if getattr(args, "cve", False):
+        report["possible_cves"] = (report.get("verdict") or {}).get("hunt_queries") or []
+    else:
+        report["possible_cves"] = []
 
     if not args.quiet:
         pretty(report)
@@ -59,6 +104,10 @@ def main():
 
     if args.xx:
         Path(args.xx).write_text(json.dumps(report))
+
+    if getattr(args, "xs", None):
+        from unveil.sarif_export import write_sarif
+        write_sarif(report, args.xs)
 
 if __name__ == "__main__":
     main()

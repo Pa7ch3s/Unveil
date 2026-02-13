@@ -98,4 +98,26 @@ def expand(indicators, enum):
                     "impact": "persistent_code_execution"
                 })
 
+        if c == "LINUX_PERSISTENCE":
+            path = i.get("file")
+            if path:
+                out.append({
+                    "surface": "linux_persistence",
+                    "path": path,
+                    "trust_boundary": "systemd/cron",
+                    "reentry": "unit_or_cron",
+                    "impact": "persistent_code_execution"
+                })
+
+        if c == "JAR_ARCHIVE":
+            path = i.get("file")
+            if path:
+                out.append({
+                    "surface": "jar_archive",
+                    "path": path,
+                    "trust_boundary": "jvm",
+                    "reentry": "manifest_or_classpath",
+                    "impact": "deserialization_or_load"
+                })
+
     return out
