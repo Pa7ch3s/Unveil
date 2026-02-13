@@ -9,6 +9,7 @@ from unveil.electron_info import get_electron_info
 from unveil.chainability import build_chainability
 from unveil.checklist_scan import run_checklist
 from unveil.attack_graph import build_attack_graph
+from unveil.missing_link_engine import enrich_hunt_plan_with_matched_paths
 from pathlib import Path
 import sys
 import tempfile
@@ -634,6 +635,8 @@ def run(
         findings, synth, verdict = build_reasoning(
             results, extended=extended, offensive=offensive, discovered_assets=discovered_assets
         )
+        if verdict.get("hunt_plan"):
+            verdict["hunt_plan"] = enrich_hunt_plan_with_matched_paths(verdict["hunt_plan"], discovered_assets)
         if unpack_dir:
             shutil.rmtree(unpack_dir, ignore_errors=True)
         return {
@@ -686,6 +689,8 @@ def run(
             extracted_refs_jar = asset_discovery.run_reference_extraction(
                 discovered_assets_jar, max_files_per_type=ref_extract_max
             )
+            if verdict.get("hunt_plan"):
+                verdict["hunt_plan"] = enrich_hunt_plan_with_matched_paths(verdict["hunt_plan"], discovered_assets_jar)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         return {
@@ -787,6 +792,8 @@ def run(
         discovered_assets, max_files_per_type=ref_extract_max
     )
     chainability = build_chainability(extracted_refs, discovered_assets)
+    if verdict.get("hunt_plan"):
+        verdict["hunt_plan"] = enrich_hunt_plan_with_matched_paths(verdict["hunt_plan"], discovered_assets)
     return {
         "metadata": {"target": target},
         "results": results,

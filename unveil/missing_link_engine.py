@@ -48,3 +48,42 @@ def infer_missing_links(missing_roles):
                 "reason": t["reason"]
             })
     return out
+
+
+def enrich_hunt_plan_with_matched_paths(hunt_plan, discovered_assets, max_paths_per_entry=15):
+    """
+    Add matched_paths to each hunt_plan entry: actual paths from discovered_assets
+    that match keywords in hunt_targets (e.g. preload.js -> paths containing 'preload.js').
+    """
+    if not hunt_plan or not discovered_assets:
+        return hunt_plan
+    all_paths = []
+    for paths in discovered_assets.values():
+        if isinstance(paths, list):
+            all_paths.extend(p for p in paths if isinstance(p, str))
+    if not all_paths:
+        return hunt_plan
+    out = []
+    for entry in hunt_plan:
+        e = dict(entry)
+        hunt_str = (e.get("hunt_targets") or "").strip()
+        if not hunt_str:
+            out.append(e)
+            continue
+        keywords = [k.strip().lower() for k in hunt_str.replace(",", " ").split() if len(k.strip()) > 2]
+        matched = []
+        seen = set()
+        for p in all_paths:
+            if len(matched) >= max_paths_per_entry:
+                break
+            pl = p.lower()
+            if pl in seen:
+                continue
+            for kw in keywords:
+                if kw in pl:
+                    matched.append(p)
+                    seen.add(pl)
+                    break
+        e["matched_paths"] = matched[:max_paths_per_entry]
+        out.append(e)
+    return out

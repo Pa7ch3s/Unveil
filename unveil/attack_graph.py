@@ -48,6 +48,7 @@ def build_attack_graph(
             "suggested_surface": suggested_surface,
             "hunt_targets": hunt_targets_str,
             "reason": reason,
+            "matched_paths": entry.get("matched_paths") or [],
         })
 
     # ---- Sendable URLs from extracted_refs

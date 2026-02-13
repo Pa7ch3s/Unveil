@@ -19,6 +19,7 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
 import javax.swing.RowFilter;
+import javax.swing.text.html.HTMLEditorKit;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.Desktop;
@@ -61,13 +62,10 @@ public class UnveilTab {
     private final JLabel statusLabel;
     private final JTabbedPane resultsTabs;
     private final JTextArea summaryArea;
-    private final JTable huntPlanTable;
-    private final DefaultTableModel huntPlanModel;
     private final JTextArea rawJsonArea;
     private final JPanel resultsToolbar;
     private final JLabel versionLabel;
     private final JButton exportHtmlBtn;
-    private final JTextField huntPlanFilterField;
     private final DefaultListModel<String> discoveredHtmlModel = new DefaultListModel<>();
     private final JList<String> discoveredHtmlList;
     private final DefaultTableModel discoveredAssetsModel;
@@ -84,7 +82,6 @@ public class UnveilTab {
     private final DefaultTableModel checklistModel;
     private final JTable checklistTable;
     private final DefaultTableModel attackGraphChainsModel;
-    private final JTable attackGraphChainsTable;
     private final DefaultTableModel sendableUrlsModel;
     private final JTable sendableUrlsTable;
     private final JButton sendToRepeaterBtn;
@@ -229,44 +226,16 @@ public class UnveilTab {
         summaryArea.setText(EMPTY_MESSAGE);
         resultsTabs.addTab("Summary", new JScrollPane(summaryArea));
 
-        this.huntPlanModel = new DefaultTableModel(
-            new String[] { "Missing role", "Suggested surface", "Hunt targets", "Reason" }, 0);
-        this.huntPlanTable = new JTable(huntPlanModel);
-        huntPlanTable.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
-        huntPlanTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        huntPlanTable.setAutoCreateRowSorter(true);
-        JPanel huntPlanPanel = new JPanel(new BorderLayout(4, 4));
-        JPanel huntPlanToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        huntPlanToolbar.add(new JLabel("Filter:"));
-        this.huntPlanFilterField = new JTextField(20);
-        huntPlanFilterField.setToolTipText("Filter rows by text in any column");
-        huntPlanFilterField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { applyHuntPlanFilter(); }
-            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { applyHuntPlanFilter(); }
-            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { applyHuntPlanFilter(); }
-        });
-        huntPlanToolbar.add(huntPlanFilterField);
-        huntPlanPanel.add(huntPlanToolbar, BorderLayout.NORTH);
-        huntPlanPanel.add(new JScrollPane(huntPlanTable), BorderLayout.CENTER);
-        JPopupMenu huntPlanMenu = new JPopupMenu();
-        JMenuItem copyCellItem = new JMenuItem("Copy cell");
-        copyCellItem.addActionListener(e -> copyHuntPlanCell());
-        huntPlanMenu.add(copyCellItem);
-        JMenuItem copyRowItem = new JMenuItem("Copy row (tab-separated)");
-        copyRowItem.addActionListener(e -> copyHuntPlanRow());
-        huntPlanMenu.add(copyRowItem);
-        JMenuItem copySurfaceItem = new JMenuItem("Copy suggested surface");
-        copySurfaceItem.addActionListener(e -> copyHuntPlanSuggestedSurface());
-        huntPlanMenu.add(copySurfaceItem);
-        huntPlanTable.setComponentPopupMenu(huntPlanMenu);
-        resultsTabs.addTab("Hunt plan", huntPlanPanel);
-
         JPanel discoveredHtmlPanel = new JPanel(new BorderLayout(4, 4));
         this.discoveredHtmlList = new JList<>(discoveredHtmlModel);
         discoveredHtmlList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         discoveredHtmlPanel.add(new JScrollPane(discoveredHtmlList), BorderLayout.CENTER);
         JPanel discoveredHtmlToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         discoveredHtmlToolbar.add(new JLabel("HTML files found inside the target — open for attacks, redev, or transparency."));
+        JButton viewInPanelBtn = new JButton("View in panel");
+        viewInPanelBtn.setToolTipText("Render HTML inside Burp (avoids blank browser with file://)");
+        viewInPanelBtn.addActionListener(e -> viewSelectedHtmlInPanel());
+        discoveredHtmlToolbar.add(viewInPanelBtn);
         JButton openHtmlBtn = new JButton("Open in browser");
         openHtmlBtn.addActionListener(e -> openSelectedHtml());
         discoveredHtmlToolbar.add(openHtmlBtn);
@@ -287,6 +256,9 @@ public class UnveilTab {
             }
         });
         JPopupMenu discoveredHtmlMenu = new JPopupMenu();
+        JMenuItem viewInPanelItem = new JMenuItem("View in panel");
+        viewInPanelItem.addActionListener(e -> viewSelectedHtmlInPanel());
+        discoveredHtmlMenu.add(viewInPanelItem);
         JMenuItem openItem = new JMenuItem("Open in browser");
         openItem.addActionListener(e -> openSelectedHtml());
         discoveredHtmlMenu.add(openItem);
@@ -398,11 +370,9 @@ public class UnveilTab {
         checklistTable.setAutoCreateRowSorter(true);
         resultsTabs.addTab("Checklist", new JScrollPane(checklistTable));
 
-        // Attack graph: chains + sendable URLs (one-click Send to Repeater)
-        this.attackGraphChainsModel = new DefaultTableModel(new String[] { "Missing role", "Surface", "Hunt targets", "Reason" }, 0);
-        this.attackGraphChainsTable = new JTable(attackGraphChainsModel);
-        attackGraphChainsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        attackGraphChainsTable.setAutoCreateRowSorter(true);
+        // Attack graph: visual chains + sendable URLs (one-click Send to Repeater)
+        this.attackGraphChainsModel = new DefaultTableModel(
+            new String[] { "Missing role", "Surface", "Hunt targets", "Reason", "Matched paths" }, 0);
         this.sendableUrlsModel = new DefaultTableModel(new String[] { "URL", "Source", "Label" }, 0);
         this.sendableUrlsTable = new JTable(sendableUrlsModel);
         sendableUrlsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
@@ -412,8 +382,8 @@ public class UnveilTab {
         sendToRepeaterBtn.addActionListener(e -> sendSelectedToRepeater());
         JPanel attackGraphPanel = new JPanel(new BorderLayout(4, 4));
         JPanel chainsPanel = new JPanel(new BorderLayout());
-        chainsPanel.add(new JLabel("Chains: missing role → surface → hunt targets"), BorderLayout.NORTH);
-        chainsPanel.add(new JScrollPane(attackGraphChainsTable), BorderLayout.CENTER);
+        chainsPanel.add(new JLabel("Chains: missing role → surface → hunt targets (with matched paths from scan)"), BorderLayout.NORTH);
+        chainsPanel.add(new JScrollPane(new AttackGraphPaintPanel(attackGraphChainsModel)), BorderLayout.CENTER);
         JPanel sendablePanel = new JPanel(new BorderLayout(4, 4));
         JPanel sendableToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         sendableToolbar.add(new JLabel("Sendable URLs (from refs / hunt plan):"));
@@ -530,20 +500,6 @@ public class UnveilTab {
         return mainPanel;
     }
 
-    private void applyHuntPlanFilter() {
-        TableRowSorter<?> sorter = (TableRowSorter<?>) huntPlanTable.getRowSorter();
-        if (sorter == null) return;
-        String q = huntPlanFilterField.getText();
-        if (q == null) q = "";
-        q = q.trim();
-        if (q.isEmpty()) {
-            sorter.setRowFilter(null);
-        } else {
-            String search = "(?i)" + java.util.regex.Pattern.quote(q);
-            sorter.setRowFilter(RowFilter.regexFilter(search, 0, 1, 2, 3));
-        }
-    }
-
     private static void setChooserToApplicationsOrHome(JFileChooser chooser) {
         File applications = new File("/Applications");
         if (applications.isDirectory()) {
@@ -624,7 +580,6 @@ public class UnveilTab {
         }
         statusLabel.setText("Scanning…");
         summaryArea.setText("Scanning " + target + "…\n\nPlease wait.");
-        huntPlanModel.setRowCount(0);
         rawJsonArea.setText("");
         resultsToolbar.setVisible(false);
         scanButton.setEnabled(false);
@@ -644,7 +599,6 @@ public class UnveilTab {
         targetField.setText(last);
         statusLabel.setText("Scanning…");
         summaryArea.setText("Scanning " + last + "…\n\nPlease wait.");
-        huntPlanModel.setRowCount(0);
         rawJsonArea.setText("");
         resultsToolbar.setVisible(false);
         scanButton.setEnabled(false);
@@ -929,23 +883,6 @@ public class UnveilTab {
             summaryArea.setText(summary.toString());
             summaryArea.setCaretPosition(0);
 
-            huntPlanModel.setRowCount(0);
-            if (verdict != null && verdict.has("hunt_plan")) {
-                JsonArray hp = verdict.getAsJsonArray("hunt_plan");
-                if (hp != null) {
-                    for (JsonElement el : hp) {
-                        JsonObject row = el.getAsJsonObject();
-                        huntPlanModel.addRow(new String[] {
-                            str(row.get("missing_role")),
-                            str(row.get("suggested_surface")),
-                            str(row.get("hunt_targets")),
-                            str(row.get("reason"))
-                        });
-                    }
-                }
-            }
-            huntPlanFilterField.setText("");
-
             discoveredHtmlModel.clear();
             if (report.has("discovered_html")) {
                 JsonArray arr = report.getAsJsonArray("discovered_html");
@@ -1070,11 +1007,24 @@ public class UnveilTab {
                             for (JsonElement el : chains) {
                                 if (el.isJsonObject()) {
                                     JsonObject row = el.getAsJsonObject();
+                                    String matchedPaths = "";
+                                    if (row.has("matched_paths") && row.get("matched_paths").isJsonArray()) {
+                                        JsonArray mp = row.getAsJsonArray("matched_paths");
+                                        StringBuilder sb = new StringBuilder();
+                                        for (JsonElement pe : mp) {
+                                            if (pe.isJsonPrimitive()) {
+                                                if (sb.length() > 0) sb.append("\n");
+                                                sb.append(pe.getAsString());
+                                            }
+                                        }
+                                        matchedPaths = sb.toString();
+                                    }
                                     attackGraphChainsModel.addRow(new Object[] {
                                         str(row.get("missing_role")),
                                         str(row.get("suggested_surface")),
                                         str(row.get("hunt_targets")),
-                                        str(row.get("reason"))
+                                        str(row.get("reason")),
+                                        matchedPaths
                                     });
                                 }
                             }
@@ -1245,6 +1195,39 @@ public class UnveilTab {
         }
     }
 
+    private void viewSelectedHtmlInPanel() {
+        String path = discoveredHtmlList.getSelectedValue();
+        if (path == null || path.isEmpty()) {
+            statusLabel.setText("Select an HTML file first.");
+            return;
+        }
+        File f = new File(path);
+        if (!f.exists() || !f.isFile()) {
+            statusLabel.setText("File not found.");
+            return;
+        }
+        try {
+            String html = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+            JEditorPane editor = new JEditorPane();
+            editor.setContentType("text/html");
+            editor.setEditorKit(new HTMLEditorKit());
+            editor.setText(html);
+            editor.setEditable(false);
+            editor.setCaretPosition(0);
+            JScrollPane scroll = new JScrollPane(editor);
+            scroll.setPreferredSize(new Dimension(800, 600));
+            JDialog dialog = new JDialog((Frame) null, "HTML: " + f.getName(), false);
+            dialog.getContentPane().add(scroll, BorderLayout.CENTER);
+            dialog.pack();
+            dialog.setLocationRelativeTo(mainPanel);
+            dialog.setVisible(true);
+            statusLabel.setText("Rendering in panel.");
+        } catch (Exception ex) {
+            statusLabel.setText("Could not load HTML.");
+            logging.logToError("View HTML in panel failed: " + ex.getMessage());
+        }
+    }
+
     private void copySelectedHtmlPath() {
         String path = discoveredHtmlList.getSelectedValue();
         if (path == null || path.isEmpty()) return;
@@ -1267,32 +1250,6 @@ public class UnveilTab {
         String url = pathToFileUrl(path);
         Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(url), null);
         statusLabel.setText("file:// URL copied.");
-    }
-
-    private void copyHuntPlanCell() {
-        int row = huntPlanTable.getSelectedRow();
-        int col = huntPlanTable.getSelectedColumn();
-        if (row < 0 || col < 0) return;
-        int modelRow = huntPlanTable.convertRowIndexToModel(row);
-        Object v = huntPlanModel.getValueAt(modelRow, col);
-        if (v != null) {
-            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(v.toString()), null);
-            statusLabel.setText("Cell copied.");
-        }
-    }
-
-    private void copyHuntPlanRow() {
-        int row = huntPlanTable.getSelectedRow();
-        if (row < 0) return;
-        int modelRow = huntPlanTable.convertRowIndexToModel(row);
-        StringBuilder sb = new StringBuilder();
-        for (int c = 0; c < huntPlanModel.getColumnCount(); c++) {
-            if (c > 0) sb.append("\t");
-            Object v = huntPlanModel.getValueAt(modelRow, c);
-            sb.append(v != null ? v.toString() : "");
-        }
-        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(sb.toString()), null);
-        statusLabel.setText("Row copied.");
     }
 
     private void exportDiscoveredHtmlList() {
@@ -1400,17 +1357,6 @@ public class UnveilTab {
         } catch (IOException ex) {
             statusLabel.setText("Export failed.");
             JOptionPane.showMessageDialog(mainPanel, "Could not save: " + ex.getMessage(), "Export error", JOptionPane.ERROR_MESSAGE);
-        }
-    }
-
-    private void copyHuntPlanSuggestedSurface() {
-        int row = huntPlanTable.getSelectedRow();
-        if (row < 0) return;
-        int modelRow = huntPlanTable.convertRowIndexToModel(row);
-        Object v = huntPlanModel.getValueAt(modelRow, 1); // Suggested surface column
-        if (v != null) {
-            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(v.toString()), null);
-            statusLabel.setText("Suggested surface copied.");
         }
     }
 
@@ -1569,6 +1515,124 @@ public class UnveilTab {
                 });
             }
         });
+    }
+
+    /** Paints attack graph chains as Role → Surface → Targets (with matched paths). */
+    private static final class AttackGraphPaintPanel extends JPanel {
+        private static final int ROW_HEIGHT = 88;
+        private static final int BOX_W = 140;
+        private static final int BOX_H = 28;
+        private static final int PAD = 12;
+        private static final int ARROW_LEN = 24;
+
+        private final DefaultTableModel model;
+
+        AttackGraphPaintPanel(DefaultTableModel model) {
+            this.model = model;
+            setBackground(UIManager.getColor("Panel.background"));
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            int rows = model.getRowCount();
+            int w = PAD * 2 + BOX_W * 3 + ARROW_LEN * 2 + 200;
+            int h = rows == 0 ? ROW_HEIGHT : PAD * 2 + rows * ROW_HEIGHT;
+            return new Dimension(w, h);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2 = (Graphics2D) g;
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int rows = model.getRowCount();
+            if (rows == 0) {
+                g2.setColor(getForeground());
+                g2.drawString("No chains. Run a scan to see the attack graph.", PAD, PAD + 20);
+                return;
+            }
+            int y = PAD;
+            for (int r = 0; r < rows; r++) {
+                String role = objStr(model.getValueAt(r, 0));
+                String surface = objStr(model.getValueAt(r, 1));
+                String targets = objStr(model.getValueAt(r, 2));
+                String reason = objStr(model.getValueAt(r, 3));
+                String paths = objStr(model.getValueAt(r, 4));
+
+                int x = PAD;
+                drawBox(g2, x, y, BOX_W, BOX_H, role, true);
+                x += BOX_W + ARROW_LEN;
+                drawArrow(g2, x - ARROW_LEN, y + BOX_H / 2, x, y + BOX_H / 2);
+                drawBox(g2, x, y, BOX_W, BOX_H, surface, true);
+                x += BOX_W + ARROW_LEN;
+                drawArrow(g2, x - ARROW_LEN, y + BOX_H / 2, x, y + BOX_H / 2);
+                drawBox(g2, x, y, BOX_W + 180, BOX_H, truncate(targets, 35), false);
+
+                if (reason != null && !reason.isEmpty()) {
+                    g2.setFont(g2.getFont().deriveFont(10f));
+                    g2.setColor(getForeground().darker());
+                    String shortReason = truncate(reason, 60);
+                    g2.drawString(shortReason, PAD, y + BOX_H + 14);
+                    g2.setFont(g2.getFont().deriveFont(12f));
+                    g2.setColor(getForeground());
+                }
+                if (paths != null && !paths.isEmpty()) {
+                    g2.setFont(g2.getFont().deriveFont(10f));
+                    g2.setColor(getForeground().darker());
+                    String firstLine = paths.contains("\n") ? paths.substring(0, paths.indexOf('\n')) : paths;
+                    g2.drawString("Paths: " + truncate(firstLine, 70), PAD, y + BOX_H + 28);
+                    g2.setFont(g2.getFont().deriveFont(12f));
+                    g2.setColor(getForeground());
+                }
+                y += ROW_HEIGHT;
+            }
+        }
+
+        private static void drawBox(Graphics2D g2, int x, int y, int w, int h, String text, boolean bold) {
+            Color bg = UIManager.getColor("Panel.background");
+            g2.setColor(bg != null ? bg.darker() : new Color(220, 220, 220));
+            g2.fillRoundRect(x, y, w, h, 6, 6);
+            g2.setColor(getDefaultColor());
+            g2.drawRoundRect(x, y, w, h, 6, 6);
+            g2.setColor(getDefaultColor());
+            if (text != null && !text.isEmpty()) {
+                Font f = g2.getFont();
+                if (bold) g2.setFont(f.deriveFont(Font.BOLD));
+                FontMetrics fm = g2.getFontMetrics();
+                int tw = fm.stringWidth(text);
+                if (tw > w - 6) text = truncate(text, (w - 6) / fm.charWidth('m'));
+                g2.drawString(text, x + (w - fm.stringWidth(text)) / 2, y + h / 2 + fm.getAscent() / 2 - 2);
+                g2.setFont(f);
+            }
+        }
+
+        private static void drawArrow(Graphics2D g2, int x1, int y1, int x2, int y2) {
+            g2.setColor(getDefaultColor());
+            g2.drawLine(x1, y1, x2, y2);
+            int dx = x2 - x1;
+            int dy = y2 - y1;
+            double len = Math.sqrt(dx * dx + dy * dy);
+            if (len < 1) return;
+            int ax = (int) (x2 - 8 * dx / len);
+            int ay = (int) (y2 - 8 * dy / len);
+            g2.drawLine(x2, y2, ax + (int)(6 * dy / len), ay - (int)(6 * dx / len));
+            g2.drawLine(x2, y2, ax - (int)(6 * dy / len), ay + (int)(6 * dx / len));
+        }
+
+        private static Color getDefaultColor() {
+            Color c = UIManager.getColor("Label.foreground");
+            return c != null ? c : Color.BLACK;
+        }
+
+        private static String objStr(Object o) {
+            return o == null ? "" : o.toString().trim();
+        }
+
+        private static String truncate(String s, int maxLen) {
+            if (s == null) return "";
+            if (s.length() <= maxLen) return s;
+            return s.substring(0, Math.max(0, maxLen - 3)) + "...";
+        }
     }
 
     public void extensionUnloaded() {
