@@ -1,6 +1,6 @@
 # Unveil — Burp Suite extension
 
-Adds an **Unveil** tab to Burp Suite: scan apps/binaries for attack surfaces, set CLI options or use the **daemon**, and view rich results (Summary, Hunt plan, Electron info, Chainability, Extracted refs, Possible CVEs, Discovered assets, Raw JSON) with Copy / Save / Export HTML / **Export SARIF**.
+Adds an **Unveil** tab to Burp Suite: scan apps/binaries for attack surfaces, set CLI options or use the **daemon**, and view rich results (Summary, Attack graph, Discovered HTML with in-panel viewer, Electron info, Chainability, Extracted refs, Possible CVEs, Discovered assets, Raw JSON) with Copy / Save / Export HTML / **Export SARIF**.
 
 ## What’s in the tab (v0.4.0)
 
@@ -11,7 +11,7 @@ Adds an **Unveil** tab to Burp Suite: scan apps/binaries for attack surfaces, se
 - **Limits** — **Max files**, **Max size (MB)**, **Max per type** (CLI `--max-files`, `--max-size-mb`, `--max-per-type`). Used for both CLI and daemon.
 - **Baseline (optional)** — Path to a baseline report JSON; passed as `--baseline` for diff (added/removed findings, verdict changed). Summary shows diff when present.
 - **Unveil executable (optional)** — Override path to the `unveil` binary when not using daemon. **Unveil CLI:** label shows detected version.
-- **Results tabs** — **Summary**, **Hunt plan**, **Discovered HTML**, **Discovered assets**, **Electron info**, **Chainability**, **Extracted refs**, **Possible CVEs**, **Checklist**, **Attack graph** (chains: role → surface → hunt targets; sendable URLs with **Send selected to Repeater**), **Raw JSON**.
+- **Results tabs** — **Summary**, **Discovered HTML** (list + **View in panel** to render HTML inside Burp), **Discovered assets**, **Electron info**, **Chainability**, **Extracted refs**, **Possible CVEs**, **Checklist**, **Attack graph** (visual graph: role → surface → targets with matched paths; sendable URLs with **Send selected to Repeater**), **Raw JSON**.
 - **Copy JSON** / **Save JSON…** / **Save compact JSON…** / **Export HTML…** / **Export SARIF…** — Export SARIF runs `unveil -q -xs <file>` for CI/IDE.
 - **Persistent settings** — Unveil path, daemon URL, option checkboxes, limits, and baseline path are saved and restored across Burp restarts (Java Preferences).
 - **Rescan last** — Re-run the last target (CLI or daemon).
@@ -55,7 +55,8 @@ The JAR is written to `build/libs/unveil-burp-0.4.0.jar`.
 ## Compressing the JSON output
 
 - **Summary** tab shows a short, human-readable verdict (exploitability band, kill chain complete, missing roles, family count, hunt plan count) so you don’t scroll through huge JSON.
-- **Hunt plan** tab shows a table: one row per suggestion (missing role, suggested surface, hunt targets, reason). Sortable and scannable.
+- **Attack graph** tab shows a visual graph of chains (missing role → surface → hunt targets) with matched paths from the scan; sendable URLs below with **Send selected to Repeater**.
+- **Discovered HTML** — **View in panel** renders the selected HTML file inside Burp (avoids blank browser with file://); **Open in browser** still available.
 - **Raw JSON** remains available for tooling or archival; **Copy JSON** / **Save JSON…** / **Save compact JSON…** for sharing or CI.
 
 ## Implemented (v0.4.0)
@@ -69,7 +70,7 @@ The JAR is written to `build/libs/unveil-burp-0.4.0.jar`.
 - **Limits & baseline** — UI for `--max-files`, `--max-size-mb`, `--max-per-type`, `--baseline`; **env** in Discovered assets type filter.
 - **Version label** — Parses “Unveil RADAR vX.Y.Z” from CLI output (handles multi-line banner).
 - **UI dedupe** — Discovered assets and extracted refs tables dedupe when populating from report (no duplicate rows).
-- **Attack graph** — Chains (missing role → surface → hunt targets → reason) and sendable URLs (http(s) from refs/hunt plan). **Send selected to Repeater** creates a Repeater tab per URL for one-click testing.
+- **Attack graph** — Visual graph of chains (role → surface → targets with matched paths from scan) and sendable URLs (http(s) from refs/hunt plan). **Send selected to Repeater** creates a Repeater tab per URL for one-click testing.
 
 ## Forward-thinking additions
 

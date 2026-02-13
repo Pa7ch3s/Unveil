@@ -60,7 +60,7 @@ Models: execution surfaces, trust boundaries, persistence anchors, and lateral b
 * **Nmap-style summary** — Target, exploitability band, killchain roles, frameworks, and surface counts before the full JSON.
 * **Discovered assets** — Configs, scripts, certs, manifests, and data files by type (html, xml, json, config, script, plist, manifest, policy, cert, data) for recon and chainability.
 * **Reference extraction** — Lightweight parsing of XML, JSON, and .config files to extract paths and URLs for trust-boundary and chain mapping.
-* **Attack graph** — Report includes `attack_graph`: chains (missing role → surface → hunt targets) and sendable_urls (http(s) from refs/hunt plan). Burp: Attack graph tab with **Send selected to Repeater** for one-click Repeater tabs.
+* **Attack graph** — Report includes `attack_graph`: chains (missing role → surface → hunt targets, with matched_paths from scan) and sendable_urls (http(s) from refs/hunt plan). Burp: Attack graph tab shows a **visual graph**; **Send selected to Repeater** for one-click Repeater tabs. Discovered HTML: **View in panel** renders HTML inside Burp.
 
 **Professional use:** Unveil’s recon and surface model aligns with thick-client security testing (e.g. [OWASP](https://owasp.org/) thick-client and desktop app guidance). Use the report’s `discovered_assets`, `extracted_refs`, `attack_graph`, and hunt plan for structured pentest workflows.
 

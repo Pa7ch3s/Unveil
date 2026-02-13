@@ -6,7 +6,8 @@
 
 ## [0.8.0] — 2026-02-13
 
-- **Attack graph** — Report includes `attack_graph` (chains + sendable_urls). Burp: Attack graph tab; **Send selected to Repeater** for one-click Repeater tabs per URL.
+- **Attack graph** — Report includes `attack_graph` (chains + sendable_urls; chains include matched_paths from scan). Burp: Attack graph tab is a **visual graph** (role → surface → targets); **Send selected to Repeater** for one-click Repeater tabs per URL. Hunt plan tab removed (redundant with attack graph).
+- **Discovered HTML in Burp** — **View in panel** renders selected HTML inside Burp (JEditorPane) so content displays without relying on system browser (avoids blank file://).
 
 ## [0.4.0] — unveil-burp (Burp Suite extension) — 2026-02-13
 
@@ -44,7 +45,7 @@
 ## [0.2.0] — unveil-burp (Burp Suite extension)
 
 - Full Unveil CLI options in UI: Path, Extended (-e), Offensive (-O), Force (-f), optional unveil executable path with Browse.
-- Results: Summary, Hunt plan (sortable table + filter), Raw JSON; Copy JSON, Save JSON, Save compact JSON, Export HTML.
+- Results: Summary, Attack graph (visual), Discovered HTML (view in panel), Raw JSON; Copy JSON, Save JSON, Save compact JSON, Export HTML.
 - Rescan last target; guard empty report on save/copy; single-author project.
 
 ---

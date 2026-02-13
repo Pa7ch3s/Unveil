@@ -39,7 +39,7 @@ import java.util.concurrent.Executors;
 import java.util.prefs.Preferences;
 
 /**
- * Unveil tab — path, options (-e, -O, -f), scan, then Summary / Hunt plan / Raw JSON views.
+ * Unveil tab — path, options (-e, -O, -f), scan, then Summary / Attack graph (visual) / Discovered HTML (view in panel) / Raw JSON and other result views.
  */
 public class UnveilTab {
 
