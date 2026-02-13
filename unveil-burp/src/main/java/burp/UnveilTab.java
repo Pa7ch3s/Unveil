@@ -135,7 +135,7 @@ public class UnveilTab {
         optExtended.setToolTipText("Extended surface expansion (deep persistence & lateral surfaces)");
         optionsPanel.add(optExtended);
         this.optOffensive = new JCheckBox("Offensive (-O)", false);
-        optOffensive.setToolTipText("Offensive surface synthesis (exploit-chain modeling, hunt plan)");
+        optOffensive.setToolTipText("Offensive surface synthesis (exploit-chain modeling, attack graph)");
         optionsPanel.add(optOffensive);
         this.optForce = new JCheckBox("Force (-f)", false);
         optForce.setToolTipText("Force analysis of unsigned / malformed binaries");
@@ -386,7 +386,7 @@ public class UnveilTab {
         chainsPanel.add(new JScrollPane(new AttackGraphPaintPanel(attackGraphChainsModel)), BorderLayout.CENTER);
         JPanel sendablePanel = new JPanel(new BorderLayout(4, 4));
         JPanel sendableToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        sendableToolbar.add(new JLabel("Sendable URLs (from refs / hunt plan):"));
+        sendableToolbar.add(new JLabel("Sendable URLs (from refs / attack graph):"));
         sendableToolbar.add(sendToRepeaterBtn);
         sendablePanel.add(sendableToolbar, BorderLayout.NORTH);
         sendablePanel.add(new JScrollPane(sendableUrlsTable), BorderLayout.CENTER);
@@ -836,9 +836,12 @@ public class UnveilTab {
                         summary.append(String.join(", ", list)).append("\n");
                     }
                 }
-                if (verdict.has("hunt_plan")) {
-                    JsonArray hp = verdict.getAsJsonArray("hunt_plan");
-                    summary.append("\nHunt plan entries: ").append(hp != null ? hp.size() : 0).append("\n");
+                if (report.has("attack_graph")) {
+                    JsonObject ag = report.getAsJsonObject("attack_graph");
+                    if (ag != null && ag.has("chains")) {
+                        JsonArray chains = ag.getAsJsonArray("chains");
+                        summary.append("\nAttack graph chains: ").append(chains != null ? chains.size() : 0).append("\n");
+                    }
                 }
             }
             if (report.has("electron_info")) {
@@ -1062,16 +1065,19 @@ public class UnveilTab {
             String baseUrl = pathToFileUrl(new File(target).getAbsolutePath());
             JsonObject verdict = report.has("verdict") ? report.getAsJsonObject("verdict") : null;
             String band = verdict != null && verdict.has("exploitability_band") ? str(verdict.get("exploitability_band")) : "UNKNOWN";
-            int huntCount = 0;
-            if (verdict != null && verdict.has("hunt_plan")) {
-                JsonArray hp = verdict.getAsJsonArray("hunt_plan");
-                if (hp != null) huntCount = hp.size();
+            int chainCount = 0;
+            if (report.has("attack_graph")) {
+                JsonObject ag = report.getAsJsonObject("attack_graph");
+                if (ag != null && ag.has("chains")) {
+                    JsonArray chains = ag.getAsJsonArray("chains");
+                    if (chains != null) chainCount = chains.size();
+                }
             }
             JsonArray checklist = report.has("checklist_findings") ? report.getAsJsonArray("checklist_findings") : null;
             int checklistCount = checklist != null ? checklist.size() : 0;
             StringBuilder detail = new StringBuilder();
             detail.append("Exploitability band: ").append(band);
-            if (huntCount > 0) detail.append("; hunt plan entries: ").append(huntCount);
+            if (chainCount > 0) detail.append("; attack graph chains: ").append(chainCount);
             if (checklistCount > 0) detail.append("; checklist findings: ").append(checklistCount);
             detail.append(". See Unveil tab for full report.");
             AuditIssueSeverity severity = severityFromBand(band);

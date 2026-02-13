@@ -54,7 +54,7 @@ The JAR is written to `build/libs/unveil-burp-0.4.0.jar`.
 
 ## Compressing the JSON output
 
-- **Summary** tab shows a short, human-readable verdict (exploitability band, kill chain complete, missing roles, family count, hunt plan count) so you don’t scroll through huge JSON.
+- **Summary** tab shows a short, human-readable verdict (exploitability band, kill chain complete, missing roles, family count, attack graph chain count) so you don’t scroll through huge JSON.
 - **Attack graph** tab shows a visual graph of chains (missing role → surface → hunt targets) with matched paths from the scan; sendable URLs below with **Send selected to Repeater**.
 - **Discovered HTML** — **View in panel** renders the selected HTML file inside Burp (avoids blank browser with file://); **Open in browser** still available.
 - **Raw JSON** remains available for tooling or archival; **Copy JSON** / **Save JSON…** / **Save compact JSON…** for sharing or CI.
@@ -70,7 +70,7 @@ The JAR is written to `build/libs/unveil-burp-0.4.0.jar`.
 - **Limits & baseline** — UI for `--max-files`, `--max-size-mb`, `--max-per-type`, `--baseline`; **env** in Discovered assets type filter.
 - **Version label** — Parses “Unveil RADAR vX.Y.Z” from CLI output (handles multi-line banner).
 - **UI dedupe** — Discovered assets and extracted refs tables dedupe when populating from report (no duplicate rows).
-- **Attack graph** — Visual graph of chains (role → surface → targets with matched paths from scan) and sendable URLs (http(s) from refs/hunt plan). **Send selected to Repeater** creates a Repeater tab per URL for one-click testing.
+- **Attack graph** — Visual graph of chains (role → surface → targets with matched paths from scan) and sendable URLs (http(s) from refs and attack graph). **Send selected to Repeater** creates a Repeater tab per URL for one-click testing.
 
 ## Forward-thinking additions
 
@@ -84,7 +84,7 @@ The JAR is written to `build/libs/unveil-burp-0.4.0.jar`.
 Ideas to take this from “useful plugin” to best-in-class:
 
 - **Burp integration** — Send selected hunt targets to Repeater/Intruder (Scanner issues / Target already implemented).
-- **Prioritization & scoring** — Sort/filter hunt plan by impact or chain completion; risk bands and custom weights.
+- **Prioritization & scoring** — Sort/filter attack graph chains by impact or chain completion; risk bands and custom weights.
 - **Context & remediation** — Inline docs for suggested surfaces; links to CVEs, advisories, or mitigation steps.
 - **Persistent config** — Done: unveil path, daemon URL, options, limits, baseline saved (Java Preferences).
 - **Reporting** — One-click HTML/PDF/Markdown reports with branding and optional sections.
