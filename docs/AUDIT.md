@@ -77,7 +77,7 @@
 
 ## 4. Code Quality & Safety
 
-- **Version string:** Repeated as `"Unveil RADAR v0.6.0"` in `cli.py` and README; consider a single source (e.g. `unveil/__init__.py` or `pyproject.toml` version) and import where needed.
+- **Version string:** **Fixed.** Single source: `pyproject.toml` version; CLI reads via `importlib.metadata.version("unveil")` (fallback `0.7.0`). Banner and `--version` are dynamic.
 - **Error handling:** DMG mount/unmount and ZIP unpacking use broad `except` or ignore errors; consider logging and clearer user messages (e.g. “DMG mount failed: …”).
 - **JSON output:** Always emitted to stdout when not using `-q` (pretty-printed). With `-xj`/`-xx` the same content is also written to a file; behavior is consistent but could be documented (e.g. “JSON is always printed unless `-q`; `-xj`/`-xx` additionally write to file”).
 
@@ -101,9 +101,9 @@
 | Medium | .js in dir mode → RuntimeError | **Fixed:** `static_parser.imports()` returns minimal `script` entry for non-binary files instead of raising |
 | Medium | Exporter passes Path to render | **Fixed:** Load JSON, call `render(report)`, write HTML to `.html` file |
 | Medium | Single-file mode surface format | Open: `entry["class"]` is dict; synth expects string surface tags |
-| Low | Double walk for discovered assets | Open: single-pass or conditional collection |
+| Low | Double walk for discovered assets | **Fixed:** Dedupe by path in `collect_discovered_assets` and `_add_to_discovered_assets`; one entry per file in `run_reference_extraction`. |
 | Low | Many subprocesses in static_parser | Open: cache and/or use lief |
-| Low | Hardcoded limits | Open: CLI or env for MAX_FILES, MAX_SIZE, etc. |
+| Low | Hardcoded limits | **Fixed:** CLI `--max-files`, `--max-size-mb`, `--max-per-type`; env `UNVEIL_MAX_FILES`, etc. |
 
 ---
 

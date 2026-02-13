@@ -204,18 +204,45 @@ unveil -C /path/to/target -q -xh report.html
 
 ---
 
+## 18. Export SARIF (CI / IDE)
+
+```bash
+unveil -C /path/to/target -xs report.sarif
+```
+
+- Exports SARIF 2.1 to `report.sarif` for GitHub Code Scanning, VS Code SARIF viewer, or other CI/IDE integration. Includes exploitability, surfaces, and checklist findings.
+
+---
+
+## 19. Baseline diff
+
+```bash
+unveil -C /path/to/target --baseline previous.json -xj current.json
+```
+
+- Compares this run to a baseline report; output includes `diff` (added/removed findings, verdict_changed) and `baseline_suppressed` on findings.
+
+---
+
 ## Quick reference: all flags
 
 | Flag | Meaning |
 |------|--------|
-| `-C`, `--target` | **Required.** Path to directory, .app, file, .dmg, .ipa, or .apk. |
+| `-C`, `--target` | **Required.** Path to directory, .app, file, .dmg, .ipa, .apk, or .jar/.war. |
 | `-e` | Extended surface expansion. |
 | `-O` | Offensive surface synthesis (exploit-chain modeling). |
 | `-f` | Force analysis of unsigned/malformed binaries. |
 | `-q`, `--quiet` | Suppress banner and pretty summary. |
+| `-V`, `--verbose` | Structured JSON log to stderr (or `UNVEIL_LOG=1`). |
+| `--max-files N` | Max binaries to analyze (env: `UNVEIL_MAX_FILES`). |
+| `--max-size-mb MB` | Max file size in MB (env: `UNVEIL_MAX_SIZE_MB`). |
+| `--max-per-type N` | Max discovered assets per type (env: `UNVEIL_MAX_PER_TYPE`). |
 | `-xh FILE` | Export HTML report to FILE. |
 | `-xj FILE` | Export indented JSON report to FILE. |
 | `-xx FILE` | Export compact JSON report to FILE. |
+| `-xs FILE` | Export SARIF 2.1 report to FILE (for CI/IDE). |
+| `--baseline FILE` | Baseline report JSON; add diff and baseline_suppressed. |
+| `--cve` | Add `possible_cves` (hunt_queries) to report. |
 
 ---
 

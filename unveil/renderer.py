@@ -29,6 +29,9 @@ summary {{ cursor: pointer; font-weight: bold; }}
 .discovered-assets a {{ color: #7afcff; text-decoration: none; }}
 .extracted-refs dd {{ margin-left: 1em; }}
 .extracted-refs dt {{ margin-top: 8px; }}
+.checklist-table {{ border-collapse: collapse; margin: 8px 0; font-size: 12px; }}
+.checklist-table th, .checklist-table td {{ border: 1px solid #1f2933; padding: 6px 10px; text-align: left; }}
+.checklist-table th {{ color: #b0b0b0; }}
 </style>
 </head>
 <body>
@@ -39,6 +42,7 @@ summary {{ cursor: pointer; font-weight: bold; }}
 {discovered_html_section}
 {discovered_assets_section}
 {extracted_refs_section}
+{checklist_section}
 
 <details class="section" open>
 <summary>Killchain Verdict</summary>
@@ -86,6 +90,19 @@ EXTRACTED_REFS_SECTION = """
 </details>
 """
 
+CHECKLIST_SECTION = """
+<details class="section">
+<summary>Checklist findings ({count}) – potential secrets / static-analysis no-nos</summary>
+<p>Pattern matches in config, json, env, script (e.g. password, api_key, secret, disabled SSL).</p>
+<table class="checklist-table">
+<thead><tr><th>File</th><th>Pattern</th><th>Line</th><th>Snippet</th></tr></thead>
+<tbody>
+{rows}
+</tbody>
+</table>
+</details>
+"""
+
 
 def _file_url(path):
     """Return a file:// URL (works when report is opened from disk). Windows: file:///C:/... ; Unix: file:///path."""
@@ -125,7 +142,7 @@ def render(report):
     by_type_parts = []
     display_cap_asset = 100
     total_assets = 0
-    for asset_type in ("html", "xml", "json", "config", "script", "plist", "manifest", "policy", "cert", "data"):
+    for asset_type in ("html", "xml", "json", "config", "script", "plist", "manifest", "policy", "cert", "data", "env"):
         paths = discovered_assets.get(asset_type) or []
         if not paths:
             continue
@@ -164,12 +181,26 @@ def render(report):
     else:
         extracted_refs_section = ""
 
+    checklist = report.get("checklist_findings") or []
+    if checklist:
+        rows = []
+        for item in checklist[:80]:
+            f = html_module.escape(str(item.get("file", "")))
+            pattern = html_module.escape(str(item.get("pattern", "")))
+            line = html_module.escape(str(item.get("line", "")))
+            snippet = html_module.escape(str(item.get("snippet", ""))[:200])
+            rows.append(f"<tr><td>{f}</td><td>{pattern}</td><td>{line}</td><td>{snippet}</td></tr>")
+        checklist_section = CHECKLIST_SECTION.format(count=len(checklist), rows="\n".join(rows))
+    else:
+        checklist_section = ""
+
     return HTML_TEMPLATE.format(
         target=target,
         band=band,
         discovered_html_section=discovered_html_section,
         discovered_assets_section=discovered_assets_section,
         extracted_refs_section=extracted_refs_section,
+        checklist_section=checklist_section,
         verdict=verdict,
         surfaces=surfaces,
         indicators=indicators,

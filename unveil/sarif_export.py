@@ -4,6 +4,12 @@ Export Unveil report to SARIF 2.1 for CI (e.g. GitHub Code Scanning, VS Code SAR
 import json as _json
 from pathlib import Path
 
+try:
+    from importlib.metadata import version as _pkg_version
+    _UNVEIL_VERSION = _pkg_version("unveil")
+except Exception:
+    _UNVEIL_VERSION = "0.7.0"
+
 
 def report_to_sarif(report, run_uri=None):
     """
@@ -59,7 +65,7 @@ def report_to_sarif(report, run_uri=None):
                 "tool": {
                     "driver": {
                         "name": "Unveil",
-                        "version": "0.7.0",
+                        "version": _UNVEIL_VERSION,
                         "informationUri": "https://github.com/Pa7ch3s/Unveil",
                         "rules": [
                             {

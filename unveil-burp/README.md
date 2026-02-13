@@ -11,7 +11,7 @@ Adds an **Unveil** tab to Burp Suite: scan apps/binaries for attack surfaces, se
 - **Limits** — **Max files**, **Max size (MB)**, **Max per type** (CLI `--max-files`, `--max-size-mb`, `--max-per-type`). Used for both CLI and daemon.
 - **Baseline (optional)** — Path to a baseline report JSON; passed as `--baseline` for diff (added/removed findings, verdict changed). Summary shows diff when present.
 - **Unveil executable (optional)** — Override path to the `unveil` binary when not using daemon. **Unveil CLI:** label shows detected version.
-- **Results tabs** — **Summary** (verdict, electron/chainability/CVE counts, baseline diff), **Hunt plan**, **Discovered HTML**, **Discovered assets** (incl. **env**), **Electron info**, **Chainability**, **Extracted refs**, **Possible CVEs**, **Raw JSON**.
+- **Results tabs** — **Summary** (verdict, electron/chainability/CVE counts, baseline diff), **Hunt plan**, **Discovered HTML**, **Discovered assets** (incl. **env**), **Electron info**, **Chainability**, **Extracted refs**, **Possible CVEs**, **Checklist** (potential secrets/static-analysis no-nos), **Raw JSON**.
 - **Copy JSON** / **Save JSON…** / **Save compact JSON…** / **Export HTML…** / **Export SARIF…** — Export SARIF runs `unveil -q -xs <file>` for CI/IDE.
 - **Persistent settings** — Unveil path, daemon URL, option checkboxes, limits, and baseline path are saved and restored across Burp restarts (Java Preferences).
 - **Rescan last** — Re-run the last target (CLI or daemon).
@@ -62,30 +62,31 @@ The JAR is written to `build/libs/unveil-burp-0.3.0.jar`.
 
 - **Persistent settings** — Java Preferences: unveil path, daemon URL, use daemon, option checkboxes, limits, baseline path (saved on successful scan).
 - **Daemon mode** — **Use daemon** + URL; `POST /scan` with JSON body (target, extended, offensive, max_files, max_size_mb, max_per_type). No CLI spawn.
-- **New report tabs** — **Electron info** (version, nodeIntegration, contextIsolation, sandbox), **Chainability** (file → ref → in scope / matched type), **Extracted refs** (file → refs), **Possible CVEs** (hunt_queries / possible_cves; Copy all).
+- **New report tabs** — **Electron info** (version, nodeIntegration, contextIsolation, sandbox), **Chainability** (file → ref → in scope / matched type), **Extracted refs** (file → refs), **Possible CVEs** (hunt_queries / possible_cves; Copy all), **Checklist** (potential secrets/static-analysis no-nos: file, pattern, snippet, line).
+- **Target / Site Map** — After each scan, results are added as Burp audit issues (one summary issue + up to 30 checklist findings) so they appear in Target and Dashboard.
 - **Summary** — Now includes electron info present, chainability count (refs / in scope), possible CVE count, and **baseline diff** (added/removed findings, verdict changed) when `--baseline` was used.
 - **Export SARIF…** — Runs `unveil -q -xs <file>` for CI (e.g. GitHub Code Scanning).
 - **Limits & baseline** — UI for `--max-files`, `--max-size-mb`, `--max-per-type`, `--baseline`; **env** in Discovered assets type filter.
 - **Version label** — Parses “Unveil RADAR vX.Y.Z” from CLI output (handles multi-line banner).
+- **UI dedupe** — Discovered assets and extracted refs tables dedupe when populating from report (no duplicate rows).
 
 ## Forward-thinking additions
 
-1. **Burp Scanner issues** — Create Burp findings from verdict/hunt_plan for Dashboard and issue list.
-2. **Send to Repeater/Intruder** — Send selected hunt target or path to Repeater/Intruder.
-3. **Report templates** — Markdown or PDF export with branding.
-4. **Context and remediation** — Tooltips linking suggested_surface to CWE/CVE and mitigation.
-5. **Scan history** — List of recent scans (path + timestamp) and re-open last report without re-scanning.
+1. **Send to Repeater/Intruder** — Send selected hunt target or path to Repeater/Intruder.
+2. **Report templates** — Markdown or PDF export with branding.
+3. **Context and remediation** — Tooltips linking suggested_surface to CWE/CVE and mitigation.
+4. **Scan history** — List of recent scans (path + timestamp) and re-open last report without re-scanning.
 
 ## Roadmap
 
 Ideas to take this from “useful plugin” to best-in-class:
 
-- **Burp integration** — Create Burp Scanner issues from verdict/hunt_plan; send selected hunt targets to Repeater/Intruder; surface in Target/Dashboard.
+- **Burp integration** — Send selected hunt targets to Repeater/Intruder (Scanner issues / Target already implemented).
 - **Prioritization & scoring** — Sort/filter hunt plan by impact or chain completion; risk bands and custom weights.
 - **Context & remediation** — Inline docs for suggested surfaces; links to CVEs, advisories, or mitigation steps.
-- **Persistent config** — Save unveil path and default options so they survive restarts.
+- **Persistent config** — Done: unveil path, daemon URL, options, limits, baseline saved (Java Preferences).
 - **Reporting** — One-click HTML/PDF/Markdown reports with branding and optional sections.
-- **Daemon mode** — Optional Unveil daemon + `POST /scan` for faster repeat scans and less process overhead.
+- **Daemon mode** — Done: Use daemon + `POST /scan` for faster repeat scans.
 - **Verification / PoC** — Buttons to generate or run proof-of-concept payloads for selected surfaces (with appropriate safeguards).
 - **Extensibility** — Custom surfaces or modules that plug into the same report format.
 

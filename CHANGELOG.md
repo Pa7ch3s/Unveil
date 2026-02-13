@@ -24,6 +24,14 @@
 - **Performance** — Lief used for Mach-O/ELF imports when available; per-run analysis cache; cache cleared at start of each run.
 - **Tests** — Optional `pytest` tests for classifier and engine (normalize_surfaces, build_reasoning, extended enum).
 - **Optional CVE** — `--cve` adds `possible_cves` (hunt_queries from verdict) to report.
+- **Checklist scan** — Report includes `checklist_findings` (potential secrets/static-analysis no-nos in config, json, env, script); SARIF export includes checklist results.
+- **Dedupe** — Discovered assets and extracted refs are deduped (one path per type; one entry per file with merged refs).
+
+## [0.3.0] — unveil-burp (Burp Suite extension)
+
+- **Checklist tab** — Displays `checklist_findings` (file, pattern, snippet, line).
+- **Target / Site Map** — Scan results added as Burp audit issues (summary + up to 30 checklist findings) so they appear in Target and Dashboard.
+- **UI dedupe** — Discovered assets and extracted refs tables dedupe by (path, type) and (file, refs) when populating from report.
 
 ## [0.2.0] — unveil-burp (Burp Suite extension)
 
