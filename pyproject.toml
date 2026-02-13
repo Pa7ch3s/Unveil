@@ -7,7 +7,7 @@ name = "unveil"
 version = "0.6.0"
 requires-python = ">=3.9"
 dependencies = ["pygments", "lief","pefile","fastapi","uvicorn","python-multipart"]
-authors = [{name="Jerrod Baker"}]
+authors = [{name="pa7ch3s"}]
 readme = "README.md"
 
 

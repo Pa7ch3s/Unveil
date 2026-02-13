@@ -1,6 +1,14 @@
 # Changelog
 
-## [0.6.0]
+## [0.2.0] — unveil-burp (Burp Suite extension)
+
+- Full Unveil CLI options in UI: Path, Extended (-e), Offensive (-O), Force (-f), optional unveil executable path with Browse.
+- Results: Summary, Hunt plan (sortable table + filter), Raw JSON; Copy JSON, Save JSON, Save compact JSON, Export HTML.
+- Rescan last target; guard empty report on save/copy; single-author project.
+
+---
+
+## [0.6.0] — CLI
 
 - **Mobile (APK / IPA)** — Unpack and scan; native libs (APK) or `.app` bundles (IPA).
 - **Windows persistence pack** — Run/Services, Scheduled Tasks, Startup, Winlogon, Scripts; harvest and tag `.xml`, `.vbs`, `.bat`, `.ps1`, `.cmd`.

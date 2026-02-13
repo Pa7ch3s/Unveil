@@ -22,6 +22,7 @@ SKIP_DIRS = {
 }
 
 VALID_SUFFIX = {".exe", ".dll", ".bin", ".dylib", ".so", ".js"}
+DISCOVERED_HTML_MAX = 500
 
 SURFACE_POWER = {
     "qt_rpath_plugin_drop": "ANCHOR",
@@ -238,7 +239,23 @@ def harvest_windows_persistence(base, results, count_ref):
             count_ref[0] += 1
 
 
-def harvest_bundle(bundle, base, results, count_ref):
+def collect_discovered_html(root, out_list, max_items=DISCOVERED_HTML_MAX):
+    """Collect .html/.htm paths under root for report (openable in browser for attacks/redev/transparency)."""
+    root = Path(root)
+    if not root.is_dir():
+        return
+    for item in root.rglob("*"):
+        if len(out_list) >= max_items:
+            return
+        if not item.is_file():
+            continue
+        if item.suffix.lower() in (".html", ".htm"):
+            out_list.append(str(item.resolve()))
+
+
+def harvest_bundle(bundle, base, results, count_ref, discovered_html=None):
+    if discovered_html is None:
+        discovered_html = []
     for item in bundle.rglob("*"):
         if count_ref[0] >= MAX_FILES:
             return
@@ -251,6 +268,13 @@ def harvest_bundle(bundle, base, results, count_ref):
         name = item.name.lower()
 
         if name in SKIP_DIRS:
+            continue
+
+        # Discovered HTML: list for interactivity (open in browser, redev, attacks)
+        if item.is_file() and item.suffix.lower() in (".html", ".htm"):
+            if len(discovered_html) < DISCOVERED_HTML_MAX:
+                discovered_html.append(str(item.resolve()))
+                tick(f"    └─ [html] {rel.name}")
             continue
 
         # Preload blade promotion
@@ -411,6 +435,7 @@ def run(target):
                 "findings": [],
                 "surfaces": [],
                 "synth_indicators": [],
+                "discovered_html": [],
             }
         base = Path(mount_dir)
         unmount_dmg = mount_dir
@@ -430,6 +455,7 @@ def run(target):
                 "findings": [],
                 "surfaces": [],
                 "synth_indicators": [],
+                "discovered_html": [],
             }
         base = root
         unpack_dir = tmp
@@ -447,12 +473,15 @@ def run(target):
                 "findings": [],
                 "surfaces": [],
                 "synth_indicators": [],
+                "discovered_html": [],
             }
         base = root
         unpack_dir = tmp
         tick(f"[SCAN] {target}")
         count_ref = [0]
         harvest_apk(base, results, count_ref)
+        discovered_html_apk = []
+        collect_discovered_html(base, discovered_html_apk)
         tick("[DONE]")
         findings, synth, verdict = build_reasoning(results)
         if unpack_dir:
@@ -464,6 +493,7 @@ def run(target):
             "findings": findings,
             "surfaces": findings,
             "synth_indicators": synth,
+            "discovered_html": discovered_html_apk,
         }
 
     # -------- Single File Mode (non-DMG file) --------
@@ -477,13 +507,15 @@ def run(target):
         surfaces_single = [{"surface": entry["class"], "path": entry["file"]}]
         synth = synthesize(surfaces_single)
         verdict = compile(synth, [], [])
+        single_discovered = [str(base.resolve())] if base.suffix.lower() in (".html", ".htm") else []
         return {
             "metadata": {"target": target},
             "results": [entry],
             "verdict": verdict,
             "findings": [],
             "surfaces": [],
-            "synth_indicators": synth
+            "synth_indicators": synth,
+            "discovered_html": single_discovered,
         }
 
     # -------- Directory Mode (or mounted DMG) --------
@@ -497,17 +529,19 @@ def run(target):
     if not bundles and base.is_dir() and base.suffix.lower() == ".app":
         bundles = [base]
 
+    discovered_html = []
     for bundle in bundles:
         if count_ref[0] >= MAX_FILES:
             break
 
         rel = bundle.relative_to(base)
         tick(f"[APP] {rel}")
-        harvest_bundle(bundle, base, results, count_ref)
+        harvest_bundle(bundle, base, results, count_ref, discovered_html)
 
     # No .app bundles (e.g. Windows app dir): harvest .exe/.dll/.so etc. from the tree
     if not bundles:
         harvest_directory_binaries(base, results, count_ref)
+    collect_discovered_html(base, discovered_html)
 
     # Windows persistence: harvest Tasks/Startup/Run/Scripts artifacts when scanning a directory
     harvest_windows_persistence(base, results, count_ref)
@@ -528,5 +562,6 @@ def run(target):
         "verdict": verdict,
         "findings": findings,
         "surfaces": findings,
-        "synth_indicators": synth
+        "synth_indicators": synth,
+        "discovered_html": discovered_html,
     }
