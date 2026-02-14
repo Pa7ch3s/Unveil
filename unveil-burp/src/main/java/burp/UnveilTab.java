@@ -5,7 +5,9 @@ import burp.api.montoya.logging.Logging;
 import burp.api.montoya.scanner.audit.issues.AuditIssue;
 import burp.api.montoya.scanner.audit.issues.AuditIssueConfidence;
 import burp.api.montoya.scanner.audit.issues.AuditIssueSeverity;
+import burp.api.montoya.http.Http;
 import burp.api.montoya.http.message.requests.HttpRequest;
+import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.repeater.Repeater;
 
 import com.google.gson.Gson;
@@ -91,6 +93,12 @@ public class UnveilTab {
     private final DefaultTableModel sendableUrlsModel;
     private final JTable sendableUrlsTable;
     private final JButton sendToRepeaterBtn;
+    private final List<LiveManipulationSlot> liveSlots = new ArrayList<>();
+    private final DefaultListModel<String> liveSlotsListModel = new DefaultListModel<>();
+    private final JList<String> liveSlotsList;
+    private final JTextArea liveRequestArea;
+    private final JTextArea liveResponseArea;
+    private int liveSlotsSelectedIndex = -1;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private static final String PREFS_NODE = "unveil-burp";
     private static final int RECENT_TARGETS_MAX = 5;
@@ -108,6 +116,22 @@ public class UnveilTab {
             String[] parts = file.split("/");
             if (parts.length >= 2) return parts[parts.length - 2] + "/" + parts[parts.length - 1];
             return parts[parts.length - 1];
+        }
+    }
+
+    private static final class LiveManipulationSlot {
+        final String url;
+        final String source;
+        final String label;
+        String requestText;
+        String responseText;
+
+        LiveManipulationSlot(String url, String source, String label) {
+            this.url = url != null ? url : "";
+            this.source = source != null ? source : "";
+            this.label = label != null ? label : "";
+            this.requestText = "";
+            this.responseText = "";
         }
     }
 
@@ -144,6 +168,10 @@ public class UnveilTab {
         rescanBtn.setToolTipText("Run scan again on the last target");
         rescanBtn.addActionListener(e -> rescanLast());
         inputPanel.add(rescanBtn);
+        JButton resetBtn = new JButton("Reset");
+        resetBtn.setToolTipText("Clear all results and refresh the report area");
+        resetBtn.addActionListener(e -> resetResults());
+        inputPanel.add(resetBtn);
 
         this.statusLabel = new JLabel(" ");
         statusLabel.setForeground(new Color(100, 100, 100));
@@ -541,6 +569,70 @@ public class UnveilTab {
         attackGraphPanel.add(sendablePanel, BorderLayout.CENTER);
         resultsTabs.addTab("Attack graph", attackGraphPanel);
 
+        // Live manipulation: per-URL slots with request/response edit and Send (Repeater-grade)
+        this.liveRequestArea = new JTextArea(12, 70);
+        liveRequestArea.setEditable(true);
+        liveRequestArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        liveRequestArea.setLineWrap(false);
+        this.liveResponseArea = new JTextArea(12, 70);
+        liveResponseArea.setEditable(true);
+        liveResponseArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        liveResponseArea.setLineWrap(false);
+        this.liveSlotsList = new JList<>(liveSlotsListModel);
+        liveSlotsList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        liveSlotsList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        liveSlotsList.addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting()) return;
+            saveCurrentLiveSlotContent();
+            int i = liveSlotsList.getSelectedIndex();
+            liveSlotsSelectedIndex = i;
+            if (i >= 0 && i < liveSlots.size()) {
+                LiveManipulationSlot slot = liveSlots.get(i);
+                liveRequestArea.setText(slot.requestText != null ? slot.requestText : "");
+                liveResponseArea.setText(slot.responseText != null ? slot.responseText : "");
+            } else {
+                liveRequestArea.setText("");
+                liveResponseArea.setText("");
+            }
+        });
+        JPanel liveLeft = new JPanel(new BorderLayout(4, 4));
+        liveLeft.add(new JLabel("Phases (from sendable URLs):"), BorderLayout.NORTH);
+        liveLeft.add(new JScrollPane(liveSlotsList), BorderLayout.CENTER);
+        JPanel liveRight = new JPanel(new BorderLayout(4, 4));
+        JPanel liveRequestPanel = new JPanel(new BorderLayout(2, 2));
+        liveRequestPanel.add(new JLabel("Request (edit and Send):"), BorderLayout.NORTH);
+        liveRequestPanel.add(new JScrollPane(liveRequestArea), BorderLayout.CENTER);
+        JPanel liveResponsePanel = new JPanel(new BorderLayout(2, 2));
+        liveResponsePanel.add(new JLabel("Response:"), BorderLayout.NORTH);
+        liveResponsePanel.add(new JScrollPane(liveResponseArea), BorderLayout.CENTER);
+        JPanel liveButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
+        JButton liveSendBtn = new JButton("Send");
+        liveSendBtn.setToolTipText("Send request and show response (via Burp HTTP client)");
+        liveSendBtn.addActionListener(e -> sendLiveRequest());
+        liveButtons.add(liveSendBtn);
+        JButton liveLoadFromProxyBtn = new JButton("Load from Proxy");
+        liveLoadFromProxyBtn.setToolTipText("Fill request from latest matching Proxy history entry");
+        liveLoadFromProxyBtn.addActionListener(e -> loadLiveRequestFromProxy());
+        liveButtons.add(liveLoadFromProxyBtn);
+        JButton liveResetSlotBtn = new JButton("Reset slot");
+        liveResetSlotBtn.setToolTipText("Reset this phase to initial request; clear response");
+        liveResetSlotBtn.addActionListener(e -> resetCurrentLiveSlot());
+        liveButtons.add(liveResetSlotBtn);
+        JButton liveRefreshAllBtn = new JButton("Refresh all");
+        liveRefreshAllBtn.setToolTipText("Reset all phases to initial requests and clear responses");
+        liveRefreshAllBtn.addActionListener(e -> refreshAllLiveSlots());
+        liveButtons.add(liveRefreshAllBtn);
+        JPanel liveCenterRight = new JPanel(new BorderLayout(4, 4));
+        liveCenterRight.add(liveRequestPanel, BorderLayout.NORTH);
+        liveCenterRight.add(liveButtons, BorderLayout.CENTER);
+        liveCenterRight.add(liveResponsePanel, BorderLayout.SOUTH);
+        JSplitPane liveSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, liveLeft, liveCenterRight);
+        liveSplit.setResizeWeight(0.25);
+        liveSplit.setDividerLocation(200);
+        JPanel liveManipulationPanel = new JPanel(new BorderLayout());
+        liveManipulationPanel.add(liveSplit, BorderLayout.CENTER);
+        resultsTabs.addTab("Live manipulation", liveManipulationPanel);
+
         this.rawJsonArea = new JTextArea(18, 80);
         rawJsonArea.setEditable(false);
         rawJsonArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
@@ -773,6 +865,145 @@ public class UnveilTab {
         } else {
             executor.submit(() -> runUnveil(last));
         }
+    }
+
+    private void resetResults() {
+        summaryArea.setText(EMPTY_MESSAGE);
+        summaryArea.setCaretPosition(0);
+        rawJsonArea.setText(EMPTY_MESSAGE);
+        rawJsonArea.setCaretPosition(0);
+        resultsToolbar.setVisible(false);
+        discoveredHtmlModel.clear();
+        discoveredAssetsModel.setRowCount(0);
+        applyDiscoveredAssetsTypeFilter();
+        chainabilityModel.setRowCount(0);
+        extractedRefsData.clear();
+        extractedRefsFilteredIndices.clear();
+        extractedRefsFileListModel.clear();
+        extractedRefsPathField.setText("");
+        extractedRefsPathField.setToolTipText(null);
+        extractedRefsDetailModel.clear();
+        extractedRefsFilterField.setText("");
+        possibleCvesModel.clear();
+        checklistModel.setRowCount(0);
+        checklistFilterField.setText("");
+        attackGraphChainsModel.setRowCount(0);
+        sendableUrlsModel.setRowCount(0);
+        liveSlots.clear();
+        liveSlotsListModel.clear();
+        liveSlotsSelectedIndex = -1;
+        liveRequestArea.setText("");
+        liveResponseArea.setText("");
+        statusLabel.setText("Results cleared.");
+    }
+
+    private void saveCurrentLiveSlotContent() {
+        if (liveSlotsSelectedIndex >= 0 && liveSlotsSelectedIndex < liveSlots.size()) {
+            LiveManipulationSlot slot = liveSlots.get(liveSlotsSelectedIndex);
+            slot.requestText = liveRequestArea.getText();
+            slot.responseText = liveResponseArea.getText();
+        }
+    }
+
+    private void sendLiveRequest() {
+        saveCurrentLiveSlotContent();
+        String requestText = liveRequestArea.getText();
+        if (requestText == null || requestText.trim().isEmpty()) {
+            statusLabel.setText("Request is empty.");
+            return;
+        }
+        try {
+            HttpRequest request = HttpRequest.httpRequest(requestText);
+            Http http = api.http();
+            HttpRequestResponse resp = http.sendRequest(request);
+            if (resp != null && resp.response() != null) {
+                String responseStr = resp.response().toString();
+                liveResponseArea.setText(responseStr);
+                if (liveSlotsSelectedIndex >= 0 && liveSlotsSelectedIndex < liveSlots.size())
+                    liveSlots.get(liveSlotsSelectedIndex).responseText = responseStr;
+                statusLabel.setText("Response received.");
+            } else {
+                liveResponseArea.setText("(no response)");
+                statusLabel.setText("No response.");
+            }
+        } catch (Exception ex) {
+            logging.logToError("Live Send: " + ex.getMessage());
+            liveResponseArea.setText("Error: " + ex.getMessage());
+            statusLabel.setText("Send failed.");
+        }
+    }
+
+    private void loadLiveRequestFromProxy() {
+        if (liveSlotsSelectedIndex < 0 || liveSlotsSelectedIndex >= liveSlots.size()) {
+            statusLabel.setText("Select a phase first.");
+            return;
+        }
+        LiveManipulationSlot slot = liveSlots.get(liveSlotsSelectedIndex);
+        try {
+            var history = api.proxy().history();
+            if (history == null) {
+                statusLabel.setText("Proxy history not available.");
+                return;
+            }
+            String targetUrl = slot.url;
+            for (int i = history.size() - 1; i >= 0; i--) {
+                var item = history.get(i);
+                if (item != null) {
+                    HttpRequest req = item.finalRequest();
+                    if (req != null) {
+                        String u = item.url();
+                        if (u == null) u = req.url();
+                        if (u != null && targetUrl != null && (u.startsWith(targetUrl.replaceFirst("/$", "")) || targetUrl.startsWith(u.replaceFirst("/$", "")))) {
+                            liveRequestArea.setText(req.toString());
+                            slot.requestText = liveRequestArea.getText();
+                            statusLabel.setText("Loaded from Proxy history.");
+                            return;
+                        }
+                    }
+                }
+            }
+            statusLabel.setText("No matching request in Proxy history.");
+        } catch (Exception ex) {
+            logging.logToError("Load from Proxy: " + ex.getMessage());
+            statusLabel.setText("Load from Proxy failed.");
+        }
+    }
+
+    private void resetCurrentLiveSlot() {
+        if (liveSlotsSelectedIndex >= 0 && liveSlotsSelectedIndex < liveSlots.size()) {
+            LiveManipulationSlot slot = liveSlots.get(liveSlotsSelectedIndex);
+            slot.requestText = "";
+            slot.responseText = "";
+            try {
+                HttpRequest req = HttpRequest.httpRequestFromUrl(slot.url);
+                slot.requestText = req != null ? req.toString() : "GET " + slot.url + " HTTP/1.1\r\n\r\n";
+            } catch (Exception ex) {
+                slot.requestText = "GET " + slot.url + " HTTP/1.1\r\nHost: " + slot.url.replaceFirst("^https?://([^/]+).*", "$1") + "\r\n\r\n";
+            }
+            liveRequestArea.setText(slot.requestText);
+            liveResponseArea.setText("");
+            statusLabel.setText("Slot reset.");
+        }
+    }
+
+    private void refreshAllLiveSlots() {
+        saveCurrentLiveSlotContent();
+        for (LiveManipulationSlot slot : liveSlots) {
+            slot.requestText = "";
+            slot.responseText = "";
+            try {
+                HttpRequest req = HttpRequest.httpRequestFromUrl(slot.url);
+                slot.requestText = req != null ? req.toString() : "GET " + slot.url + " HTTP/1.1\r\n\r\n";
+            } catch (Exception ex) {
+                slot.requestText = "GET " + slot.url + " HTTP/1.1\r\nHost: " + slot.url.replaceFirst("^https?://([^/]+).*", "$1") + "\r\n\r\n";
+            }
+        }
+        if (liveSlotsSelectedIndex >= 0 && liveSlotsSelectedIndex < liveSlots.size()) {
+            LiveManipulationSlot s = liveSlots.get(liveSlotsSelectedIndex);
+            liveRequestArea.setText(s.requestText);
+            liveResponseArea.setText("");
+        }
+        statusLabel.setText("All phases refreshed.");
     }
 
     private void runUnveilViaDaemon(String target) {
@@ -1215,6 +1446,9 @@ public class UnveilTab {
             applyChecklistFilter();
             attackGraphChainsModel.setRowCount(0);
             sendableUrlsModel.setRowCount(0);
+            liveSlots.clear();
+            liveSlotsListModel.clear();
+            liveSlotsSelectedIndex = -1;
             if (report.has("attack_graph")) {
                 JsonObject ag = report.getAsJsonObject("attack_graph");
                 if (ag != null) {
@@ -1250,19 +1484,36 @@ public class UnveilTab {
                     if (ag.has("sendable_urls")) {
                         JsonArray urls = ag.getAsJsonArray("sendable_urls");
                         if (urls != null) {
+                            int phase = 1;
                             for (JsonElement el : urls) {
                                 if (el.isJsonObject()) {
                                     JsonObject row = el.getAsJsonObject();
-                                    sendableUrlsModel.addRow(new Object[] {
-                                        str(row.get("url")),
-                                        str(row.get("source")),
-                                        str(row.get("label"))
-                                    });
+                                    String url = str(row.get("url"));
+                                    String source = str(row.get("source"));
+                                    String label = str(row.get("label"));
+                                    sendableUrlsModel.addRow(new Object[] { url, source, label });
+                                    if (url != null && (url.startsWith("http://") || url.startsWith("https://"))) {
+                                        LiveManipulationSlot slot = new LiveManipulationSlot(url, source, label);
+                                        try {
+                                            HttpRequest req = HttpRequest.httpRequestFromUrl(url);
+                                            slot.requestText = req != null ? req.toString() : "GET " + url + " HTTP/1.1\r\nHost: " + url.replaceFirst("^https?://([^/]+).*", "$1") + "\r\n\r\n";
+                                        } catch (Exception ex) {
+                                            slot.requestText = "GET " + url + " HTTP/1.1\r\nHost: " + url.replaceFirst("^https?://([^/]+).*", "$1") + "\r\n\r\n";
+                                        }
+                                        liveSlots.add(slot);
+                                        liveSlotsListModel.addElement("Phase " + phase + ": " + (label != null && !label.isEmpty() ? label : url));
+                                        phase++;
+                                    }
                                 }
                             }
                         }
                     }
                 }
+            }
+            if (liveSlotsSelectedIndex >= 0 && liveSlotsSelectedIndex < liveSlots.size()) {
+                LiveManipulationSlot s = liveSlots.get(liveSlotsSelectedIndex);
+                liveRequestArea.setText(s.requestText != null ? s.requestText : "");
+                liveResponseArea.setText(s.responseText != null ? s.responseText : "");
             }
             addFindingsToTarget(report);
         } catch (Exception e) {
