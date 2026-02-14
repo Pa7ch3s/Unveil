@@ -1,12 +1,12 @@
 """
-Static analysis checklist: scan discovered config/json/env/script for common no-nos
+Static analysis checklist: scan discovered config/json/env/script/plist/xml for common no-nos
 (hardcoded credentials, secrets, and static analysis checklist items).
 """
 from pathlib import Path
 import re
 from typing import List
 
-CHECKLIST_MAX_FILE_SIZE = 256 * 1024  # 256KB
+CHECKLIST_MAX_FILE_SIZE = 512 * 1024  # 512KB (was 256KB) to catch larger configs
 CHECKLIST_MAX_FILES_PER_TYPE = 80
 CHECKLIST_MAX_FINDINGS_PER_FILE = 20
 SNIPPET_LEN = 120
@@ -22,6 +22,11 @@ CHECKLIST_PATTERNS = [
     ("private_key_path", re.compile(r"(?i)(?:private[_-]?key|keyfile|pem)\s*[=:]\s*['\"]?([^'\"\s]+)", re.IGNORECASE)),
     ("bearer_token", re.compile(r"(?i)bearer\s+([a-zA-Z0-9_\-\.]{20,})", re.IGNORECASE)),
     ("basic_auth", re.compile(r"(?i)basic\s+([a-zA-Z0-9+/=]{20,})", re.IGNORECASE)),
+    ("jwt", re.compile(r"eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")),
+    ("slack_token", re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}")),
+    ("github_token", re.compile(r"ghp_[A-Za-z0-9]{36,}|gho_[A-Za-z0-9]{36,}")),
+    ("pem_private_key", re.compile(r"-----BEGIN (?:RSA |EC |DSA )?PRIVATE KEY-----")),
+    ("generic_key_long", re.compile(r"(?i)(?:key|credential)\s*[=:]\s*['\"]?([^'\"\s]{24,})", re.IGNORECASE)),
     ("debug_true", re.compile(r"(?i)(?:debug|verbose)\s*[=:]\s*(?:true|1|yes)")),
     ("disabled_ssl", re.compile(r"(?i)(?:rejectUnauthorized|strictSSL|verify)\s*[=:]\s*(?:false|0)")),
     ("eval_or_danger", re.compile(r"(?i)(?:eval\s*\(|new\s+Function\s*\(|document\.write\s*\(|innerHTML\s*=)")),
@@ -69,11 +74,11 @@ def scan_file(file_path: str, asset_type: str) -> List[dict]:
 
 def run_checklist(discovered_assets: dict, max_per_type: int = CHECKLIST_MAX_FILES_PER_TYPE) -> List[dict]:
     """
-    Run checklist scan on config, json, env, and script assets.
+    Run checklist scan on config, json, env, script, plist, and xml assets.
     Returns list of {"file", "pattern", "snippet", "line"} for report checklist_findings.
     """
     out = []
-    for asset_type in ("config", "json", "env", "script"):
+    for asset_type in ("config", "json", "env", "script", "plist", "xml"):
         paths = (discovered_assets or {}).get(asset_type) or []
         for path in paths[:max_per_type]:
             out.extend(scan_file(path, asset_type))
