@@ -1107,8 +1107,13 @@ public class UnveilTab {
             if (report.has("discovered_html")) {
                 JsonArray arr = report.getAsJsonArray("discovered_html");
                 if (arr != null) {
+                    java.util.Set<String> seenHtml = new java.util.LinkedHashSet<>();
                     for (JsonElement el : arr) {
-                        if (el.isJsonPrimitive()) discoveredHtmlModel.addElement(el.getAsString());
+                        if (el.isJsonPrimitive()) {
+                            String path = el.getAsString();
+                            if (path != null && !path.isEmpty() && seenHtml.add(path))
+                                discoveredHtmlModel.addElement(path);
+                        }
                     }
                 }
             }
