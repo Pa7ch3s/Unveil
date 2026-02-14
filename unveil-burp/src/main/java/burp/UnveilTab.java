@@ -76,6 +76,9 @@ public class UnveilTab {
     private final JComboBox<String> discoveredAssetsTypeFilter;
     private final DefaultTableModel chainabilityModel;
     private final JTable chainabilityTable;
+    private final JTextField chainabilityFilterField;
+    private final JComboBox<String> chainabilityScopeFilter;
+    private final JLabel chainabilitySummaryLabel;
     private final List<UnveilTab.ExtractedRefEntry> extractedRefsData = new ArrayList<>();
     private final List<Integer> extractedRefsFilteredIndices = new ArrayList<>();
     private final DefaultListModel<String> extractedRefsFileListModel = new DefaultListModel<>();
@@ -163,9 +166,8 @@ public class UnveilTab {
         this.mainPanel = new JPanel(new BorderLayout(10, 10));
         this.mainPanel.setBorder(new EmptyBorder(16, 16, 16, 16));
 
-        JLabel intro = new JLabel("Find attack surfaces in apps and binaries. Enter a path, set options, then scan.");
-        intro.setBorder(new EmptyBorder(0, 0, 12, 0));
-        mainPanel.add(intro, BorderLayout.NORTH);
+        JLabel intro = new JLabel("Thick-client attack surface: path to app/binary, then Scan.");
+        intro.setBorder(new EmptyBorder(0, 0, 8, 0));
 
         // Path + Browse + Scan
         JPanel inputPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 8));
@@ -263,7 +265,6 @@ public class UnveilTab {
         this.versionLabel = new JLabel("Extension " + extVer + " · CLI: —");
         versionLabel.setForeground(new Color(100, 100, 100));
         versionLabel.setFont(versionLabel.getFont().deriveFont(Font.ITALIC, versionLabel.getFont().getSize2D() - 1));
-        unveilPathPanel.add(versionLabel);
 
         // Proxy / Cert helper (thick client: proxy env + CA cert instructions)
         JPanel proxyCertPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
@@ -322,7 +323,23 @@ public class UnveilTab {
         summaryArea.setLineWrap(true);
         summaryArea.setWrapStyleWord(true);
         summaryArea.setText(EMPTY_MESSAGE);
-        resultsTabs.addTab("Summary", new JScrollPane(summaryArea));
+        // CVE hunt queries in Summary (no separate tab)
+        this.possibleCvesList = new JList<>(possibleCvesModel);
+        possibleCvesList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        JPanel cveQueriesToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        JLabel cveQueriesLabel = new JLabel("CVE hunt queries (paste into NVD/CVE database for CVE IDs):");
+        cveQueriesLabel.setToolTipText("These are search terms, not CVE numbers. Use at nvd.nist.gov or similar to find CVEs.");
+        cveQueriesToolbar.add(cveQueriesLabel);
+        JButton copyCvesBtn = new JButton("Copy all");
+        copyCvesBtn.addActionListener(e -> copyPossibleCves());
+        cveQueriesToolbar.add(copyCvesBtn);
+        JPanel cveQueriesPanel = new JPanel(new BorderLayout(4, 4));
+        cveQueriesPanel.add(cveQueriesToolbar, BorderLayout.NORTH);
+        cveQueriesPanel.add(new JScrollPane(possibleCvesList), BorderLayout.CENTER);
+        JSplitPane summarySplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(summaryArea), cveQueriesPanel);
+        summarySplit.setResizeWeight(0.6);
+        summarySplit.setOneTouchExpandable(true);
+        resultsTabs.addTab("Summary", summarySplit);
 
         JPanel discoveredHtmlPanel = new JPanel(new BorderLayout(4, 4));
         this.discoveredHtmlList = new JList<>(discoveredHtmlModel);
@@ -424,12 +441,54 @@ public class UnveilTab {
         discoveredAssetsTable.setComponentPopupMenu(discoveredAssetsMenu);
         resultsTabs.addTab("Discovered assets", discoveredAssetsPanel);
 
-        // Chainability — panel + toolbar + scrollable table (matches other upgraded tabs)
+        // Chainability — file→ref links; filter, summary, tooltips, actions for testers
         this.chainabilityModel = new DefaultTableModel(new String[] { "File", "Ref", "In scope", "Matched type" }, 0);
         this.chainabilityTable = new JTable(chainabilityModel);
         chainabilityTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         chainabilityTable.setAutoCreateRowSorter(true);
         chainabilityTable.setRowHeight(Math.max(20, chainabilityTable.getRowHeight()));
+        chainabilityTable.setDefaultRenderer(String.class, new javax.swing.table.DefaultTableCellRenderer() {
+            @Override
+            public java.awt.Component getTableCellRendererComponent(JTable t, Object value, boolean selected, boolean focus, int row, int col) {
+                java.awt.Component c = super.getTableCellRendererComponent(t, value, selected, focus, row, col);
+                if (col == 2 && value != null) {
+                    String v = value.toString();
+                    if ("Yes".equals(v)) {
+                        c.setForeground(selected ? c.getForeground() : new Color(40, 160, 80));
+                    } else {
+                        c.setForeground(selected ? c.getForeground() : new Color(120, 120, 120));
+                    }
+                }
+                return c;
+            }
+        });
+        chainabilityTable.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+            @Override
+            public void mouseMoved(java.awt.event.MouseEvent e) {
+                int col = chainabilityTable.columnAtPoint(e.getPoint());
+                int row = chainabilityTable.rowAtPoint(e.getPoint());
+                if (row >= 0 && col >= 0) {
+                    Object v = chainabilityTable.getValueAt(row, col);
+                    chainabilityTable.setToolTipText(v != null ? v.toString() : null);
+                } else {
+                    chainabilityTable.setToolTipText(null);
+                }
+            }
+        });
+        JPopupMenu chainabilityMenu = new JPopupMenu();
+        JMenuItem chainabilityCopyPathItem = new JMenuItem("Copy path (File)");
+        chainabilityCopyPathItem.addActionListener(e -> copyChainabilityCell(0));
+        chainabilityMenu.add(chainabilityCopyPathItem);
+        JMenuItem copyRefItem = new JMenuItem("Copy ref");
+        copyRefItem.addActionListener(e -> copyChainabilityCell(1));
+        chainabilityMenu.add(copyRefItem);
+        JMenuItem openUrlItem = new JMenuItem("Open ref as URL");
+        openUrlItem.addActionListener(e -> openChainabilityRefAsUrl());
+        chainabilityMenu.add(openUrlItem);
+        JMenuItem openFileItem = new JMenuItem("Open file (if exists)");
+        openFileItem.addActionListener(e -> openChainabilityFile());
+        chainabilityMenu.add(openFileItem);
+        chainabilityTable.setComponentPopupMenu(chainabilityMenu);
         JScrollPane chainabilityScroll = new JScrollPane(chainabilityTable);
         chainabilityScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         chainabilityScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
@@ -437,7 +496,24 @@ public class UnveilTab {
         JPanel chainabilityPanel = new JPanel(new BorderLayout(4, 4));
         chainabilityPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
         JPanel chainabilityToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        chainabilityToolbar.add(new JLabel("File → Ref (in scope, matched type). Use scrollbars to see all rows and columns."));
+        chainabilityToolbar.add(new JLabel("File → Ref (thick-client links)."));
+        this.chainabilityFilterField = new JTextField(16);
+        chainabilityFilterField.setToolTipText("Filter by path or ref text");
+        chainabilityFilterField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { applyChainabilityFilter(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { applyChainabilityFilter(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { applyChainabilityFilter(); }
+        });
+        chainabilityToolbar.add(new JLabel("Filter:"));
+        chainabilityToolbar.add(chainabilityFilterField);
+        this.chainabilityScopeFilter = new JComboBox<>(new String[] { "All", "In scope", "Out of scope" });
+        chainabilityScopeFilter.setToolTipText("Filter by scope");
+        chainabilityScopeFilter.addActionListener(e -> applyChainabilityFilter());
+        chainabilityToolbar.add(chainabilityScopeFilter);
+        this.chainabilitySummaryLabel = new JLabel("—");
+        chainabilitySummaryLabel.setForeground(Color.GRAY);
+        chainabilitySummaryLabel.setFont(chainabilitySummaryLabel.getFont().deriveFont(11f));
+        chainabilityToolbar.add(chainabilitySummaryLabel);
         chainabilityPanel.add(chainabilityToolbar, BorderLayout.NORTH);
         chainabilityPanel.add(chainabilityScroll, BorderLayout.CENTER);
         resultsTabs.addTab("Chainability", chainabilityPanel);
@@ -538,21 +614,6 @@ public class UnveilTab {
         extractedRefsPanel.add(extractedRefsSplit, BorderLayout.CENTER);
         resultsTabs.addTab("Extracted refs", extractedRefsPanel);
 
-        // Possible CVEs
-        this.possibleCvesList = new JList<>(possibleCvesModel);
-        possibleCvesList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        JPanel possibleCvesPanel = new JPanel(new BorderLayout(4, 4));
-        JPanel possibleCvesToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        JLabel possibleCvesLabel = new JLabel("Hunt queries / CVE search terms (paste into NVD/CVE database for CVE IDs):");
-        possibleCvesLabel.setToolTipText("These are search terms, not CVE numbers. Use at nvd.nist.gov or similar to find CVEs.");
-        possibleCvesToolbar.add(possibleCvesLabel);
-        JButton copyCvesBtn = new JButton("Copy all");
-        copyCvesBtn.addActionListener(e -> copyPossibleCves());
-        possibleCvesToolbar.add(copyCvesBtn);
-        possibleCvesPanel.add(possibleCvesToolbar, BorderLayout.NORTH);
-        possibleCvesPanel.add(new JScrollPane(possibleCvesList), BorderLayout.CENTER);
-        resultsTabs.addTab("Possible CVEs", possibleCvesPanel);
-
         // Checklist (potential secrets / static analysis no-nos)
         this.checklistModel = new DefaultTableModel(new String[] { "File", "Pattern", "Snippet", "Line" }, 0);
         this.checklistTable = new JTable(checklistModel);
@@ -589,7 +650,9 @@ public class UnveilTab {
         chainsPanel.setBorder(new EmptyBorder(4, 8, 8, 8));
         JPanel chainsHeader = new JPanel(new BorderLayout(4, 2));
         chainsHeader.add(new JLabel("Chains: vulnerable component → what to hunt (paths from scan). Use \"View PoC payloads\" to confirm exploitation."), BorderLayout.NORTH);
-        JLabel chainsLegend = new JLabel("<html><span style='font-size:10px;color:gray'>First column = actual component/surface found; preconfigured payloads available per chain to confirm basic exploitation.</span></html>");
+        JLabel chainsLegend = new JLabel("First column = component/surface found; use View PoC payloads per chain to confirm exploitation.");
+        chainsLegend.setFont(chainsLegend.getFont().deriveFont(10f));
+        chainsLegend.setForeground(Color.GRAY);
         chainsLegend.setToolTipText("Select a row and click View PoC payloads for preconfigured steps or payloads to confirm the attack surface.");
         chainsHeader.add(chainsLegend, BorderLayout.CENTER);
         JPanel chainsBtnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
@@ -652,19 +715,28 @@ public class UnveilTab {
                 liveResponseArea.setText("");
             }
         });
+        liveSlotsList.setToolTipText("HTTP(S) endpoints the app may load or call; select one to edit and send.");
+        liveRequestArea.setToolTipText("Outgoing request; edit to test interception or server (thick-client traffic).");
+        liveResponseArea.setToolTipText("Response / result from the last Send.");
         JPanel liveLeft = new JPanel(new BorderLayout(4, 4));
-        liveLeft.add(new JLabel("Phases (from sendable URLs):"), BorderLayout.NORTH);
+        JLabel liveEndpointsLabel = new JLabel("Endpoints (from app refs)");
+        liveEndpointsLabel.setToolTipText("URLs discovered from the thick-client binary; modify and send to test proxy or server.");
+        liveLeft.add(liveEndpointsLabel, BorderLayout.NORTH);
         liveLeft.add(new JScrollPane(liveSlotsList), BorderLayout.CENTER);
         JPanel liveRight = new JPanel(new BorderLayout(4, 4));
         JPanel liveRequestPanel = new JPanel(new BorderLayout(2, 2));
-        liveRequestPanel.add(new JLabel("Request (edit and Send):"), BorderLayout.NORTH);
+        JLabel liveRequestLabel = new JLabel("Outgoing request / payload");
+        liveRequestLabel.setToolTipText("Edit and send to test interception or server (thick-client equivalent of Repeater).");
+        liveRequestPanel.add(liveRequestLabel, BorderLayout.NORTH);
         liveRequestPanel.add(new JScrollPane(liveRequestArea), BorderLayout.CENTER);
         JPanel liveResponsePanel = new JPanel(new BorderLayout(2, 2));
-        liveResponsePanel.add(new JLabel("Response:"), BorderLayout.NORTH);
+        JLabel liveResponseLabel = new JLabel("Response / result");
+        liveResponseLabel.setToolTipText("Result from last Send.");
+        liveResponsePanel.add(liveResponseLabel, BorderLayout.NORTH);
         liveResponsePanel.add(new JScrollPane(liveResponseArea), BorderLayout.CENTER);
         JPanel liveButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
         JButton liveSendBtn = new JButton("Send");
-        liveSendBtn.setToolTipText("Send request and show response (via Burp HTTP client)");
+        liveSendBtn.setToolTipText("Send request and show response (thick-client traffic via Burp)");
         liveSendBtn.addActionListener(e -> sendLiveRequest());
         liveButtons.add(liveSendBtn);
         JButton liveLoadFromProxyBtn = new JButton("Load from Proxy");
@@ -672,11 +744,11 @@ public class UnveilTab {
         liveLoadFromProxyBtn.addActionListener(e -> loadLiveRequestFromProxy());
         liveButtons.add(liveLoadFromProxyBtn);
         JButton liveResetSlotBtn = new JButton("Reset slot");
-        liveResetSlotBtn.setToolTipText("Reset this phase to initial request; clear response");
+        liveResetSlotBtn.setToolTipText("Reset this slot to initial request; clear response");
         liveResetSlotBtn.addActionListener(e -> resetCurrentLiveSlot());
         liveButtons.add(liveResetSlotBtn);
         JButton liveRefreshAllBtn = new JButton("Refresh all");
-        liveRefreshAllBtn.setToolTipText("Reset all phases to initial requests and clear responses");
+        liveRefreshAllBtn.setToolTipText("Reset all slots to initial requests and clear responses");
         liveRefreshAllBtn.addActionListener(e -> refreshAllLiveSlots());
         liveButtons.add(liveRefreshAllBtn);
         JPanel liveCenterRight = new JPanel(new BorderLayout(4, 4));
@@ -686,7 +758,11 @@ public class UnveilTab {
         JSplitPane liveSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, liveLeft, liveCenterRight);
         liveSplit.setResizeWeight(0.25);
         liveSplit.setDividerLocation(200);
-        JPanel liveManipulationPanel = new JPanel(new BorderLayout());
+        JPanel liveManipulationPanel = new JPanel(new BorderLayout(4, 4));
+        JLabel liveHint = new JLabel("Thick-client: endpoints the app may call; edit payload and Send to test proxy or server.");
+        liveHint.setForeground(Color.GRAY);
+        liveHint.setFont(liveHint.getFont().deriveFont(11f));
+        liveManipulationPanel.add(liveHint, BorderLayout.NORTH);
         liveManipulationPanel.add(liveSplit, BorderLayout.CENTER);
         resultsTabs.addTab("Live manipulation", liveManipulationPanel);
 
@@ -705,26 +781,46 @@ public class UnveilTab {
         });
         resultsTabs.addTab("Raw JSON", rawJsonScroll);
 
-        JPanel top = new JPanel(new BorderLayout(0, 10));
-        top.add(intro, BorderLayout.NORTH);
-        JPanel controls = new JPanel();
-        controls.setLayout(new BoxLayout(controls, BoxLayout.PAGE_AXIS));
-        controls.add(inputPanel);
-        controls.add(optionsPanel);
-        controls.add(daemonPanel);
-        controls.add(limitsPanel);
-        controls.add(baselinePanel);
-        controls.add(unveilPathPanel);
-        controls.add(proxyCertPanel);
-        top.add(controls, BorderLayout.CENTER);
+        // Upper section: consolidated into sub-tabs to reduce clutter
+        JPanel scanTab = new JPanel();
+        scanTab.setLayout(new BoxLayout(scanTab, BoxLayout.PAGE_AXIS));
+        scanTab.add(intro);
+        scanTab.add(inputPanel);
+        scanTab.add(optionsPanel);
+        JPanel statusRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
+        statusRow.add(statusLabel);
+        statusRow.add(versionLabel);
+        scanTab.add(statusRow);
 
-        JPanel center = new JPanel(new BorderLayout(0, 8));
-        center.add(resultsToolbar, BorderLayout.NORTH);
-        center.add(resultsTabs, BorderLayout.CENTER);
+        JPanel advancedTab = new JPanel();
+        advancedTab.setLayout(new BoxLayout(advancedTab, BoxLayout.PAGE_AXIS));
+        advancedTab.add(daemonPanel);
+        advancedTab.add(limitsPanel);
+        advancedTab.add(baselinePanel);
+        advancedTab.add(unveilPathPanel);
+        advancedTab.add(proxyCertPanel);
+
+        JTabbedPane controlsTabs = new JTabbedPane();
+        controlsTabs.addTab("Scan", scanTab);
+        controlsTabs.addTab("Advanced", advancedTab);
+
+        JPanel controlsWrapper = new JPanel(new BorderLayout(0, 4));
+        controlsWrapper.add(controlsTabs, BorderLayout.CENTER);
+        controlsWrapper.setMinimumSize(new Dimension(400, 120));
+
+        // Lower section: results (toolbar + tabs) — resizable vertically
+        JPanel resultsWrapper = new JPanel(new BorderLayout(0, 8));
+        resultsWrapper.add(resultsToolbar, BorderLayout.NORTH);
+        resultsWrapper.add(resultsTabs, BorderLayout.CENTER);
         resultsTabs.setBorder(BorderFactory.createEtchedBorder());
+        resultsWrapper.setMinimumSize(new Dimension(400, 200));
 
-        mainPanel.add(top, BorderLayout.NORTH);
-        mainPanel.add(center, BorderLayout.CENTER);
+        JSplitPane mainSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, controlsWrapper, resultsWrapper);
+        mainSplit.setResizeWeight(0.22);
+        mainSplit.setOneTouchExpandable(true);
+        mainSplit.setDividerLocation(0.22);
+
+        mainPanel.add(mainSplit, BorderLayout.CENTER);
 
         loadPreferences();
         executor.submit(this::fetchUnveilVersion);
@@ -1429,20 +1525,27 @@ public class UnveilTab {
             applyDiscoveredAssetsTypeFilter();
 
             chainabilityModel.setRowCount(0);
+            int chainabilityInScope = 0;
             if (report.has("chainability")) {
                 JsonArray ca = report.getAsJsonArray("chainability");
                 if (ca != null) {
                     for (JsonElement el : ca) {
                         JsonObject row = el.getAsJsonObject();
+                        boolean inScope = row.has("in_scope") && row.get("in_scope").getAsBoolean();
+                        if (inScope) chainabilityInScope++;
                         chainabilityModel.addRow(new Object[] {
                             str(row.get("file")),
                             str(row.get("ref")),
-                            row.has("in_scope") && row.get("in_scope").getAsBoolean() ? "Yes" : "No",
+                            inScope ? "Yes" : "No",
                             str(row.get("matched_type"))
                         });
                     }
                 }
             }
+            chainabilitySummaryLabel.setText(chainabilityModel.getRowCount() + " rows · " + chainabilityInScope + " in scope");
+            chainabilityFilterField.setText("");
+            chainabilityScopeFilter.setSelectedIndex(0);
+            applyChainabilityFilter();
             extractedRefsData.clear();
             if (report.has("extracted_refs")) {
                 JsonArray er = report.getAsJsonArray("extracted_refs");
@@ -1500,9 +1603,13 @@ public class UnveilTab {
                     }
                 }
             }
-            checklistFilterField.setText("");
-            applyChecklistFilter();
-            attackGraphChainsModel.setRowCount(0);
+        checklistFilterField.setText("");
+        applyChecklistFilter();
+        chainabilityFilterField.setText("");
+        chainabilityScopeFilter.setSelectedIndex(0);
+        chainabilitySummaryLabel.setText("—");
+        applyChainabilityFilter();
+        attackGraphChainsModel.setRowCount(0);
             attackGraphPayloadsByRow.clear();
             sendableUrlsModel.setRowCount(0);
             liveSlots.clear();
@@ -1943,6 +2050,82 @@ public class UnveilTab {
         }
     }
 
+    private void applyChainabilityFilter() {
+        TableRowSorter<?> sorter = (TableRowSorter<?>) chainabilityTable.getRowSorter();
+        if (sorter == null) return;
+        String q = chainabilityFilterField.getText() != null ? chainabilityFilterField.getText().trim() : "";
+        String scope = chainabilityScopeFilter.getSelectedItem() != null ? chainabilityScopeFilter.getSelectedItem().toString() : "All";
+        java.util.List<RowFilter<Object, Object>> filters = new ArrayList<>();
+        if (!q.isEmpty()) {
+            String search = "(?i)" + java.util.regex.Pattern.quote(q);
+            filters.add(RowFilter.regexFilter(search, 0, 1));
+        }
+        if ("In scope".equals(scope)) {
+            filters.add(RowFilter.regexFilter("^Yes$", 2));
+        } else if ("Out of scope".equals(scope)) {
+            filters.add(RowFilter.regexFilter("^No$", 2));
+        }
+        if (filters.isEmpty()) {
+            sorter.setRowFilter(null);
+        } else {
+            sorter.setRowFilter(RowFilter.andFilter(filters));
+        }
+    }
+
+    private String chainabilityValueAt(int modelRow, int col) {
+        if (modelRow < 0 || modelRow >= chainabilityModel.getRowCount() || col < 0 || col >= 4) return null;
+        Object v = chainabilityModel.getValueAt(modelRow, col);
+        return v != null ? v.toString().trim() : null;
+    }
+
+    private void copyChainabilityCell(int col) {
+        int viewRow = chainabilityTable.getSelectedRow();
+        if (viewRow < 0) { statusLabel.setText("Select a row."); return; }
+        int modelRow = chainabilityTable.convertRowIndexToModel(viewRow);
+        String s = chainabilityValueAt(modelRow, col);
+        if (s != null && !s.isEmpty()) {
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(s), null);
+            statusLabel.setText(col == 0 ? "Path copied." : "Ref copied.");
+        }
+    }
+
+    private void openChainabilityRefAsUrl() {
+        int viewRow = chainabilityTable.getSelectedRow();
+        if (viewRow < 0) { statusLabel.setText("Select a row."); return; }
+        int modelRow = chainabilityTable.convertRowIndexToModel(viewRow);
+        String ref = chainabilityValueAt(modelRow, 1);
+        if (ref == null || !(ref.startsWith("http://") || ref.startsWith("https://"))) {
+            statusLabel.setText("Ref is not a URL.");
+            return;
+        }
+        try {
+            if (Desktop.isDesktopSupported()) {
+                Desktop.getDesktop().browse(new java.net.URI(ref));
+                statusLabel.setText("Opened in browser.");
+            }
+        } catch (Exception ex) {
+            statusLabel.setText("Could not open URL.");
+        }
+    }
+
+    private void openChainabilityFile() {
+        int viewRow = chainabilityTable.getSelectedRow();
+        if (viewRow < 0) { statusLabel.setText("Select a row."); return; }
+        int modelRow = chainabilityTable.convertRowIndexToModel(viewRow);
+        String path = chainabilityValueAt(modelRow, 0);
+        if (path == null || path.isEmpty()) { statusLabel.setText("No path."); return; }
+        java.io.File f = new java.io.File(path);
+        if (!f.exists() || !f.isFile()) { statusLabel.setText("File not found or not a file."); return; }
+        try {
+            if (Desktop.isDesktopSupported()) {
+                Desktop.getDesktop().open(f);
+                statusLabel.setText("Opened in default app.");
+            }
+        } catch (Exception ex) {
+            statusLabel.setText("Open failed.");
+        }
+    }
+
     private String getSelectedAssetPath() {
         int row = discoveredAssetsTable.getSelectedRow();
         if (row < 0) return null;
@@ -2321,15 +2504,16 @@ public class UnveilTab {
 
         @Override
         public Dimension getPreferredSize() {
-            int rows = model.getRowCount();
+            int rows = model != null ? model.getRowCount() : 0;
             int w = PAD * 2 + ROLE_BOX_W + BOX_W + ARROW_LEN + 240;
-            int h = rows == 0 ? ROW_HEIGHT : PAD * 2 + rows * (ROW_HEIGHT + ROW_PAD);
+            int h = rows <= 0 ? ROW_HEIGHT : Math.min(Integer.MAX_VALUE - PAD * 2, PAD * 2 + rows * (ROW_HEIGHT + ROW_PAD));
             return new Dimension(w, h);
         }
 
         @Override
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
+            if (model == null) return;
             Graphics2D g2 = (Graphics2D) g;
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             int rows = model.getRowCount();
