@@ -93,7 +93,7 @@ EXTRACTED_REFS_SECTION = """
 CHECKLIST_SECTION = """
 <details class="section">
 <summary>Checklist findings ({count}) – potential secrets / static-analysis no-nos</summary>
-<p>Pattern matches in config, json, env, script (e.g. password, api_key, secret, disabled SSL).</p>
+<p>Pattern matches in config, json, env, script, plist, xml (e.g. password, api_key, secret, JWT, PEM, disabled SSL).</p>
 <table class="checklist-table">
 <thead><tr><th>File</th><th>Pattern</th><th>Line</th><th>Snippet</th></tr></thead>
 <tbody>
