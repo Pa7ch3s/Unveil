@@ -92,6 +92,7 @@ public class UnveilTab {
     private final DefaultTableModel attackGraphChainsModel;
     private final DefaultTableModel sendableUrlsModel;
     private final JTable sendableUrlsTable;
+    private final JScrollPane attackGraphScrollPane;
     private final JButton sendToRepeaterBtn;
     private final List<LiveManipulationSlot> liveSlots = new ArrayList<>();
     private final DefaultListModel<String> liveSlotsListModel = new DefaultListModel<>();
@@ -407,12 +408,23 @@ public class UnveilTab {
         discoveredAssetsTable.setComponentPopupMenu(discoveredAssetsMenu);
         resultsTabs.addTab("Discovered assets", discoveredAssetsPanel);
 
-        // Chainability
+        // Chainability — panel + toolbar + scrollable table (matches other upgraded tabs)
         this.chainabilityModel = new DefaultTableModel(new String[] { "File", "Ref", "In scope", "Matched type" }, 0);
         this.chainabilityTable = new JTable(chainabilityModel);
         chainabilityTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         chainabilityTable.setAutoCreateRowSorter(true);
-        resultsTabs.addTab("Chainability", new JScrollPane(chainabilityTable));
+        chainabilityTable.setRowHeight(Math.max(20, chainabilityTable.getRowHeight()));
+        JScrollPane chainabilityScroll = new JScrollPane(chainabilityTable);
+        chainabilityScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        chainabilityScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        chainabilityScroll.setBorder(new EmptyBorder(0, 0, 0, 0));
+        JPanel chainabilityPanel = new JPanel(new BorderLayout(4, 4));
+        chainabilityPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
+        JPanel chainabilityToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        chainabilityToolbar.add(new JLabel("File → Ref (in scope, matched type). Use scrollbars to see all rows and columns."));
+        chainabilityPanel.add(chainabilityToolbar, BorderLayout.NORTH);
+        chainabilityPanel.add(chainabilityScroll, BorderLayout.CENTER);
+        resultsTabs.addTab("Chainability", chainabilityPanel);
 
         // Extracted refs — master/detail: file list (short names) | path + refs list
         this.extractedRefsPathField = new JTextField();
@@ -556,9 +568,22 @@ public class UnveilTab {
         sendToRepeaterBtn.setToolTipText("Create a Repeater tab for each selected http(s) URL (or all if none selected)");
         sendToRepeaterBtn.addActionListener(e -> sendSelectedToRepeater());
         JPanel attackGraphPanel = new JPanel(new BorderLayout(4, 4));
+        attackGraphPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
         JPanel chainsPanel = new JPanel(new BorderLayout());
-        chainsPanel.add(new JLabel("Chains: missing role → surface → hunt targets (with matched paths from scan)"), BorderLayout.NORTH);
-        chainsPanel.add(new JScrollPane(new AttackGraphPaintPanel(attackGraphChainsModel)), BorderLayout.CENTER);
+        chainsPanel.setBorder(new EmptyBorder(4, 8, 8, 8));
+        chainsPanel.add(new JLabel("Chains: missing role → surface → hunt targets (with matched paths from scan). Scroll to see all."), BorderLayout.NORTH);
+        // Constrain graph area height so the scroll pane gets a bounded viewport and shows scrollbars
+        JPanel graphScrollWrapper = new JPanel(new BorderLayout());
+        int graphAreaHeight = 480;
+        graphScrollWrapper.setPreferredSize(new Dimension(Integer.MAX_VALUE, graphAreaHeight));
+        graphScrollWrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, graphAreaHeight));
+        graphScrollWrapper.setMinimumSize(new Dimension(200, 120));
+        this.attackGraphScrollPane = new JScrollPane(new AttackGraphPaintPanel(attackGraphChainsModel));
+        attackGraphScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        attackGraphScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        attackGraphScrollPane.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+        graphScrollWrapper.add(attackGraphScrollPane, BorderLayout.CENTER);
+        chainsPanel.add(graphScrollWrapper, BorderLayout.CENTER);
         JPanel sendablePanel = new JPanel(new BorderLayout(4, 4));
         JPanel sendableToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         sendableToolbar.add(new JLabel("Sendable URLs (from refs / attack graph):"));
@@ -1510,6 +1535,8 @@ public class UnveilTab {
                     }
                 }
             }
+            attackGraphScrollPane.revalidate();
+            attackGraphScrollPane.repaint();
             if (liveSlotsSelectedIndex >= 0 && liveSlotsSelectedIndex < liveSlots.size()) {
                 LiveManipulationSlot s = liveSlots.get(liveSlotsSelectedIndex);
                 liveRequestArea.setText(s.requestText != null ? s.requestText : "");
@@ -2155,16 +2182,19 @@ public class UnveilTab {
         }
     }
 
-    /** Paints attack graph chains as Role → Surface → Targets (with matched paths). */
+    /** Paints attack graph chains as Role → Surface → Targets (with matched paths). Upgraded card-style rows. */
     private static final class AttackGraphPaintPanel extends JPanel {
-        private static final int ROW_HEIGHT = 88;
-        private static final int BOX_W = 140;
-        private static final int BOX_H = 28;
-        private static final int PAD = 12;
-        private static final int ARROW_LEN = 24;
+        private static final int ROW_HEIGHT = 92;
+        private static final int BOX_W = 144;
+        private static final int BOX_H = 30;
+        private static final int PAD = 16;
+        private static final int ROW_PAD = 8;
+        private static final int ARROW_LEN = 26;
+        private static final int CARD_ARC = 10;
 
         private final DefaultTableModel model;
         private final boolean darkTheme;
+        private final Color cardBg;
 
         AttackGraphPaintPanel(DefaultTableModel model) {
             this.model = model;
@@ -2172,6 +2202,7 @@ public class UnveilTab {
             if (bg == null) bg = new Color(240, 240, 240);
             setBackground(bg);
             this.darkTheme = isDark(bg);
+            this.cardBg = darkTheme ? new Color(48, 48, 52) : new Color(248, 248, 250);
         }
 
         private static boolean isDark(Color c) {
@@ -2183,8 +2214,8 @@ public class UnveilTab {
         @Override
         public Dimension getPreferredSize() {
             int rows = model.getRowCount();
-            int w = PAD * 2 + BOX_W * 3 + ARROW_LEN * 2 + 200;
-            int h = rows == 0 ? ROW_HEIGHT : PAD * 2 + rows * ROW_HEIGHT;
+            int w = PAD * 2 + BOX_W * 3 + ARROW_LEN * 2 + 220;
+            int h = rows == 0 ? ROW_HEIGHT : PAD * 2 + rows * (ROW_HEIGHT + ROW_PAD);
             return new Dimension(w, h);
         }
 
@@ -2207,6 +2238,13 @@ public class UnveilTab {
                 String reason = objStr(model.getValueAt(r, 3));
                 String paths = objStr(model.getValueAt(r, 4));
 
+                // Card background for this row
+                int cardW = PAD * 2 + BOX_W * 3 + ARROW_LEN * 2 + 200;
+                g2.setColor(cardBg);
+                g2.fillRoundRect(PAD - 4, y - 4, cardW, ROW_HEIGHT + 4, CARD_ARC, CARD_ARC);
+                g2.setColor(darkTheme ? new Color(70, 70, 74) : new Color(220, 220, 224));
+                g2.drawRoundRect(PAD - 4, y - 4, cardW, ROW_HEIGHT + 4, CARD_ARC, CARD_ARC);
+
                 int x = PAD;
                 drawBox(g2, x, y, BOX_W, BOX_H, role, true, darkTheme);
                 x += BOX_W + ARROW_LEN;
@@ -2214,13 +2252,13 @@ public class UnveilTab {
                 drawBox(g2, x, y, BOX_W, BOX_H, surface, true, darkTheme);
                 x += BOX_W + ARROW_LEN;
                 drawArrow(g2, x - ARROW_LEN, y + BOX_H / 2, x, y + BOX_H / 2, darkTheme);
-                drawBox(g2, x, y, BOX_W + 180, BOX_H, truncate(targets, 35), false, darkTheme);
+                drawBox(g2, x, y, BOX_W + 200, BOX_H, truncate(targets, 38), false, darkTheme);
 
                 if (reason != null && !reason.isEmpty()) {
                     g2.setFont(g2.getFont().deriveFont(10f));
                     g2.setColor(secondaryColor());
-                    String shortReason = truncate(reason, 60);
-                    g2.drawString(shortReason, PAD, y + BOX_H + 14);
+                    String shortReason = truncate(reason, 62);
+                    g2.drawString(shortReason, PAD, y + BOX_H + 16);
                     g2.setFont(g2.getFont().deriveFont(12f));
                     g2.setColor(foregroundColor());
                 }
@@ -2228,11 +2266,11 @@ public class UnveilTab {
                     g2.setFont(g2.getFont().deriveFont(10f));
                     g2.setColor(secondaryColor());
                     String firstLine = paths.contains("\n") ? paths.substring(0, paths.indexOf('\n')) : paths;
-                    g2.drawString("Paths: " + truncate(firstLine, 70), PAD, y + BOX_H + 28);
+                    g2.drawString("Paths: " + truncate(firstLine, 72), PAD, y + BOX_H + 30);
                     g2.setFont(g2.getFont().deriveFont(12f));
                     g2.setColor(foregroundColor());
                 }
-                y += ROW_HEIGHT;
+                y += ROW_HEIGHT + ROW_PAD;
             }
         }
 
@@ -2252,35 +2290,39 @@ public class UnveilTab {
         }
 
         private static void drawBox(Graphics2D g2, int x, int y, int w, int h, String text, boolean bold, boolean darkTheme) {
-            Color boxFill = darkTheme ? Color.BLACK : (UIManager.getColor("Panel.background") != null ? UIManager.getColor("Panel.background").darker() : new Color(220, 220, 220));
+            Color boxFill = darkTheme ? new Color(30, 30, 34) : new Color(60, 60, 68);
             g2.setColor(boxFill);
-            g2.fillRoundRect(x, y, w, h, 6, 6);
-            Color edge = darkTheme ? Color.WHITE : (UIManager.getColor("Label.foreground") != null ? UIManager.getColor("Label.foreground") : Color.BLACK);
+            g2.fillRoundRect(x, y, w, h, 8, 8);
+            Color edge = darkTheme ? new Color(120, 120, 128) : new Color(100, 100, 108);
             g2.setColor(edge);
-            g2.drawRoundRect(x, y, w, h, 6, 6);
-            if (text != null && !text.isEmpty()) {
-                g2.setColor(edge);
+            g2.drawRoundRect(x, y, w, h, 8, 8);
+                if (text != null && !text.isEmpty()) {
+                g2.setColor(darkTheme ? Color.WHITE : new Color(230, 230, 235));
                 Font f = g2.getFont();
                 if (bold) g2.setFont(f.deriveFont(Font.BOLD));
                 FontMetrics fm = g2.getFontMetrics();
                 int tw = fm.stringWidth(text);
-                if (tw > w - 6) text = truncate(text, Math.max(1, (w - 6) / Math.max(1, fm.charWidth('m'))));
+                if (tw > w - 8) text = truncate(text, Math.max(1, (w - 8) / Math.max(1, fm.charWidth('m'))));
                 g2.drawString(text, x + (w - fm.stringWidth(text)) / 2, y + h / 2 + fm.getAscent() / 2 - 2);
                 g2.setFont(f);
             }
         }
 
         private static void drawArrow(Graphics2D g2, int x1, int y1, int x2, int y2, boolean darkTheme) {
-            g2.setColor(darkTheme ? Color.WHITE : (UIManager.getColor("Label.foreground") != null ? UIManager.getColor("Label.foreground") : Color.BLACK));
+            g2.setColor(darkTheme ? new Color(160, 160, 168) : new Color(100, 100, 108));
+            java.awt.Stroke prev = g2.getStroke();
+            g2.setStroke(new java.awt.BasicStroke(1.5f));
             g2.drawLine(x1, y1, x2, y2);
             int dx = x2 - x1;
             int dy = y2 - y1;
             double len = Math.sqrt(dx * dx + dy * dy);
-            if (len < 1) return;
-            int ax = (int) (x2 - 8 * dx / len);
-            int ay = (int) (y2 - 8 * dy / len);
-            g2.drawLine(x2, y2, ax + (int)(6 * dy / len), ay - (int)(6 * dx / len));
-            g2.drawLine(x2, y2, ax - (int)(6 * dy / len), ay + (int)(6 * dx / len));
+            if (len >= 1) {
+                int ax = (int) (x2 - 8 * dx / len);
+                int ay = (int) (y2 - 8 * dy / len);
+                g2.drawLine(x2, y2, ax + (int)(6 * dy / len), ay - (int)(6 * dx / len));
+                g2.drawLine(x2, y2, ax - (int)(6 * dy / len), ay + (int)(6 * dx / len));
+            }
+            g2.setStroke(prev);
         }
 
         private static String objStr(Object o) {
