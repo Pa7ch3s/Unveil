@@ -1,4 +1,5 @@
 import os
+import plistlib
 import subprocess
 import tempfile
 import shutil
@@ -273,6 +274,192 @@ def manifest(target):
         "target": os.path.basename(target),
         "note": "Manifest extraction only implemented for PE (embedded manifest)",
     }
+
+
+# Machine constants for PE (partial)
+PE_MACHINE = {
+    0x014c: "x86",
+    0x8664: "x64",
+    0xAA64: "ARM64",
+}
+
+# Subsystem
+PE_SUBSYSTEM = {
+    2: "Windows GUI",
+    3: "Windows CUI",
+    5: "OS2 CUI",
+    7: "POSIX CUI",
+}
+
+
+def _pe_specifications(path):
+    """Extract exact PE specifications (headers + version info) for pen-test actionable detail. Returns dict or None."""
+    if not pefile or not _is_pe(path):
+        return None
+    try:
+        pe = pefile.PE(path)
+        out = {
+            "type": "PE",
+            "path": os.path.basename(path),
+            "physical_size": os.path.getsize(path) if os.path.isfile(path) else None,
+        }
+        # FILE_HEADER
+        if hasattr(pe, "FILE_HEADER"):
+            fh = pe.FILE_HEADER
+            out["machine"] = PE_MACHINE.get(getattr(fh, "Machine", None), f"0x{getattr(fh, 'Machine', 0):04x}")
+            out["characteristics"] = getattr(fh, "Characteristics", None)
+        # OPTIONAL_HEADER (same for 32/64)
+        if hasattr(pe, "OPTIONAL_HEADER"):
+            oh = pe.OPTIONAL_HEADER
+            out["image_size"] = getattr(oh, "SizeOfImage", None)
+            out["code_size"] = getattr(oh, "SizeOfCode", None)
+            out["initialized_data_size"] = getattr(oh, "SizeOfInitializedData", None)
+            out["uninitialized_data_size"] = getattr(oh, "SizeOfUninitializedData", None)
+            out["linker_version"] = f"{getattr(oh, 'MajorLinkerVersion', 0)}.{getattr(oh, 'MinorLinkerVersion', 0)}"
+            out["os_version"] = f"{getattr(oh, 'MajorOperatingSystemVersion', 0)}.{getattr(oh, 'MinorOperatingSystemVersion', 0)}"
+            out["subsystem_version"] = f"{getattr(oh, 'MajorSubsystemVersion', 0)}.{getattr(oh, 'MinorSubsystemVersion', 0)}"
+            out["subsystem"] = PE_SUBSYSTEM.get(getattr(oh, "Subsystem", None), str(getattr(oh, "Subsystem", "")))
+            out["dll_characteristics"] = getattr(oh, "DLL_Characteristics", None)
+            out["stack_reserve"] = getattr(oh, "SizeOfStackReserve", None)
+            out["stack_commit"] = getattr(oh, "SizeOfStackCommit", None)
+            out["heap_reserve"] = getattr(oh, "SizeOfHeapReserve", None)
+            out["heap_commit"] = getattr(oh, "SizeOfHeapCommit", None)
+        # Version resource (numeric)
+        if hasattr(pe, "VS_FIXEDFILEINFO") and pe.VS_FIXEDFILEINFO:
+            v = pe.VS_FIXEDFILEINFO
+            fm = getattr(v, "FileVersionMS", 0) or 0
+            fl = getattr(v, "FileVersionLS", 0) or 0
+            out["file_version"] = f"{(fm >> 16)}.{(fm & 0xFFFF)}.{(fl >> 16)}.{(fl & 0xFFFF)}"
+            pm = getattr(v, "ProductVersionMS", 0) or 0
+            pl = getattr(v, "ProductVersionLS", 0) or 0
+            out["product_version"] = f"{(pm >> 16)}.{(pm & 0xFFFF)}.{(pl >> 16)}.{(pl & 0xFFFF)}"
+        # Version strings (FileDescription, LegalCopyright, ProductName, etc.)
+        if hasattr(pe, "FileInfo") and pe.FileInfo:
+            for fi in pe.FileInfo:
+                if hasattr(fi, "StringTable") and fi.StringTable:
+                    for st in fi.StringTable:
+                        if hasattr(st, "entries") and st.entries:
+                            for k, v in st.entries.items():
+                                if v and isinstance(v, bytes):
+                                    try:
+                                        v = v.decode("utf-16-le", errors="replace").strip("\x00")
+                                    except Exception:
+                                        v = v.decode("utf-8", errors="replace").strip("\x00")
+                                out[k.decode("utf-8") if isinstance(k, bytes) else str(k)] = v
+        if getattr(pe, "close", None):
+            pe.close()
+        return out
+    except Exception:
+        return None
+
+
+def _macho_specifications(path):
+    """Extract Mach-O binary specifications when lief is available. Returns dict or None."""
+    if not lief or not _is_macho(path):
+        return None
+    try:
+        binary = lief.parse(path)
+        if binary is None:
+            return None
+        out = {
+            "type": "Mach-O",
+            "path": os.path.basename(path),
+            "physical_size": os.path.getsize(path) if os.path.isfile(path) else None,
+        }
+        out["format"] = str(binary.format).replace("FORMAT.", "") if hasattr(binary, "format") else None
+        if hasattr(binary, "header"):
+            h = binary.header
+            out["cpu_type"] = str(getattr(h, "cpu_type", ""))
+            out["file_type"] = str(getattr(h, "file_type", ""))
+        if hasattr(binary, "libraries") and binary.libraries:
+            out["libraries_count"] = len(binary.libraries)
+        return out
+    except Exception:
+        return None
+
+
+def binary_specifications(path):
+    """
+    Return exact, actionable binary specifications for the given path (PE or Mach-O).
+    Used in report summary for pen-test detail (sizes, versions, subsystem, etc.).
+    """
+    if not path or not os.path.exists(path):
+        return None
+    if os.path.isdir(path):
+        return None
+    specs = _pe_specifications(path)
+    if specs:
+        return specs
+    specs = _macho_specifications(path)
+    if specs:
+        return specs
+    # Fallback: minimal file_type + size for any file
+    try:
+        ft = _run(["file", "-b", path])
+        return {
+            "type": "file",
+            "path": os.path.basename(path),
+            "physical_size": os.path.getsize(path),
+            "file_type": (ft or "").strip(),
+        }
+    except Exception:
+        return None
+
+
+def _app_bundle_main_executable(app_path):
+    """Return path to main executable inside a macOS .app bundle, or None."""
+    if not app_path or not os.path.isdir(app_path):
+        return None
+    if not app_path.endswith(".app"):
+        return None
+    contents = os.path.join(app_path, "Contents")
+    macos = os.path.join(contents, "MacOS")
+    if not os.path.isdir(macos):
+        return None
+    exe_name = None
+    info_plist = os.path.join(contents, "Info.plist")
+    if os.path.isfile(info_plist):
+        try:
+            with open(info_plist, "rb") as f:
+                plist = plistlib.load(f)
+            exe_name = (plist or {}).get("CFBundleExecutable")
+        except Exception:
+            pass
+    if exe_name:
+        candidate = os.path.join(macos, exe_name)
+        if os.path.isfile(candidate):
+            return candidate
+    for name in sorted(os.listdir(macos)):
+        candidate = os.path.join(macos, name)
+        if os.path.isfile(candidate) and not name.startswith("."):
+            return candidate
+    return None
+
+
+def specifications_for_target(path):
+    """
+    Return specifications for the report (file, directory, or .app bundle).
+    For files: same as binary_specifications().
+    For .app: main executable's specs plus "bundle" key.
+    For other directories: minimal {"type": "directory", "path": ...}.
+    """
+    if not path or not os.path.exists(path):
+        return None
+    if os.path.isfile(path):
+        return binary_specifications(path)
+    if os.path.isdir(path):
+        main_exe = _app_bundle_main_executable(path)
+        if main_exe:
+            specs = binary_specifications(main_exe)
+            if specs is not None:
+                specs = dict(specs)
+                specs["bundle"] = os.path.basename(path.rstrip(os.sep))
+                return specs
+        return {
+            "type": "directory",
+            "path": os.path.basename(path.rstrip(os.sep)),
+        }
+    return None
 
 
 def analyze(target):

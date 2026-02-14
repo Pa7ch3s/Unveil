@@ -65,6 +65,7 @@ public class UnveilTab {
     private final JTextArea rawJsonArea;
     private final JPanel resultsToolbar;
     private final JLabel versionLabel;
+    private final JTextField proxyHostPortField;
     private final JButton exportHtmlBtn;
     private final DefaultListModel<String> discoveredHtmlModel = new DefaultListModel<>();
     private final JList<String> discoveredHtmlList;
@@ -73,8 +74,14 @@ public class UnveilTab {
     private final JComboBox<String> discoveredAssetsTypeFilter;
     private final DefaultTableModel chainabilityModel;
     private final JTable chainabilityTable;
-    private final DefaultTableModel extractedRefsModel;
-    private final JTable extractedRefsTable;
+    private final List<UnveilTab.ExtractedRefEntry> extractedRefsData = new ArrayList<>();
+    private final List<Integer> extractedRefsFilteredIndices = new ArrayList<>();
+    private final DefaultListModel<String> extractedRefsFileListModel = new DefaultListModel<>();
+    private final JList<String> extractedRefsFileList;
+    private final JTextField extractedRefsFilterField;
+    private final JTextField extractedRefsPathField;
+    private final DefaultListModel<String> extractedRefsDetailModel = new DefaultListModel<>();
+    private final JList<String> extractedRefsDetailList;
     private final DefaultListModel<String> possibleCvesModel = new DefaultListModel<>();
     private final JList<String> possibleCvesList;
     private final DefaultTableModel checklistModel;
@@ -88,6 +95,21 @@ public class UnveilTab {
     private static final String PREFS_NODE = "unveil-burp";
     private static final int RECENT_TARGETS_MAX = 5;
     private final List<String> recentTargets = new ArrayList<>();
+
+    private static final class ExtractedRefEntry {
+        final String file;
+        final List<String> refs;
+        ExtractedRefEntry(String file, List<String> refs) {
+            this.file = file != null ? file : "";
+            this.refs = refs != null ? refs : Collections.emptyList();
+        }
+        String shortDisplay() {
+            if (file.isEmpty()) return "(no path)";
+            String[] parts = file.split("/");
+            if (parts.length >= 2) return parts[parts.length - 2] + "/" + parts[parts.length - 1];
+            return parts[parts.length - 1];
+        }
+    }
 
     private static final Gson GSON = new Gson();
     private static final String EMPTY_MESSAGE =
@@ -197,6 +219,37 @@ public class UnveilTab {
         versionLabel.setForeground(new Color(100, 100, 100));
         versionLabel.setFont(versionLabel.getFont().deriveFont(Font.ITALIC, versionLabel.getFont().getSize2D() - 1));
         unveilPathPanel.add(versionLabel);
+
+        // Proxy / Cert helper (thick client: proxy env + CA cert instructions)
+        JPanel proxyCertPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+        proxyCertPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Proxy (for thick clients)", 0, 0, null));
+        proxyCertPanel.add(new JLabel("Listener:"));
+        this.proxyHostPortField = new JTextField(14);
+        proxyHostPortField.setToolTipText("Burp proxy listener, e.g. 127.0.0.1:8080");
+        proxyHostPortField.setText(detectProxyListener());
+        proxyHostPortField.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                savePreferences();
+            }
+        });
+        proxyCertPanel.add(proxyHostPortField);
+        JButton copyProxyEnvBtn = new JButton("Copy proxy env");
+        copyProxyEnvBtn.setToolTipText("Copy HTTP_PROXY and HTTPS_PROXY for use in terminal or app launcher");
+        copyProxyEnvBtn.addActionListener(e -> copyProxyEnv());
+        proxyCertPanel.add(copyProxyEnvBtn);
+        JButton copyProxyUrlBtn = new JButton("Copy proxy URL");
+        copyProxyUrlBtn.setToolTipText("Copy single proxy URL (e.g. http://127.0.0.1:8080) for apps that take one URL");
+        copyProxyUrlBtn.addActionListener(e -> copyProxyUrl());
+        proxyCertPanel.add(copyProxyUrlBtn);
+        JButton copyCaCertInstructionsBtn = new JButton("Copy CA cert instructions");
+        copyCaCertInstructionsBtn.setToolTipText("Copy steps to export and install Burp's CA certificate for TLS interception");
+        copyCaCertInstructionsBtn.addActionListener(e -> copyCaCertInstructions());
+        proxyCertPanel.add(copyCaCertInstructionsBtn);
+        JButton openSettingsBtn = new JButton("Open Settings");
+        openSettingsBtn.setToolTipText("Open Burp Settings (Proxy listener is under Tools → Proxy → Options)");
+        openSettingsBtn.addActionListener(e -> showProxySettingsHint());
+        proxyCertPanel.add(openSettingsBtn);
 
         // Results: toolbar + tabbed view
         this.resultsToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
@@ -333,30 +386,100 @@ public class UnveilTab {
         chainabilityTable.setAutoCreateRowSorter(true);
         resultsTabs.addTab("Chainability", new JScrollPane(chainabilityTable));
 
-        // Extracted refs
-        this.extractedRefsModel = new DefaultTableModel(new String[] { "File", "Refs" }, 0);
-        this.extractedRefsTable = new JTable(extractedRefsModel);
-        extractedRefsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        extractedRefsTable.setAutoCreateRowSorter(true);
-        extractedRefsTable.setRowHeight(Math.max(extractedRefsTable.getRowHeight(), 48));
-        extractedRefsTable.getColumnModel().getColumn(0).setCellRenderer(new javax.swing.table.DefaultTableCellRenderer() {
+        // Extracted refs — master/detail: file list (short names) | path + refs list
+        this.extractedRefsPathField = new JTextField();
+        extractedRefsPathField.setEditable(false);
+        extractedRefsPathField.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 11));
+        this.extractedRefsDetailList = new JList<>(extractedRefsDetailModel);
+        extractedRefsDetailList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        extractedRefsDetailList.setToolTipText("References extracted from the selected file");
+        extractedRefsDetailList.setCellRenderer(new DefaultListCellRenderer() {
             @Override
-            public java.awt.Component getTableCellRendererComponent(JTable t, Object value, boolean sel, boolean focus, int row, int col) {
-                java.awt.Component c = super.getTableCellRendererComponent(t, value, sel, focus, row, col);
+            public java.awt.Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean selected, boolean focus) {
+                java.awt.Component c = super.getListCellRendererComponent(list, value, index, selected, focus);
                 setToolTipText(value != null ? value.toString() : null);
                 return c;
             }
         });
-        extractedRefsTable.getColumnModel().getColumn(1).setCellRenderer(new javax.swing.table.DefaultTableCellRenderer() {
-            { setVerticalAlignment(SwingConstants.TOP); }
+        JPopupMenu extractedRefsDetailMenu = new JPopupMenu();
+        JMenuItem copyOneRefItem = new JMenuItem("Copy selected ref");
+        copyOneRefItem.addActionListener(e -> {
+            String ref = extractedRefsDetailList.getSelectedValue();
+            if (ref != null && !ref.isEmpty())
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(ref), null);
         });
-        extractedRefsTable.getColumnModel().getColumn(0).setPreferredWidth(320);
-        extractedRefsTable.getColumnModel().getColumn(1).setPreferredWidth(500);
+        extractedRefsDetailMenu.add(copyOneRefItem);
+        extractedRefsDetailList.setComponentPopupMenu(extractedRefsDetailMenu);
+        this.extractedRefsFileList = new JList<>(extractedRefsFileListModel);
+        extractedRefsFileList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        extractedRefsFileList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        extractedRefsFileList.setCellRenderer(new DefaultListCellRenderer() {
+            @Override
+            public java.awt.Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean selected, boolean focus) {
+                java.awt.Component c = super.getListCellRendererComponent(list, value, index, selected, focus);
+                if (index >= 0 && index < extractedRefsFilteredIndices.size()) {
+                    int dataIdx = extractedRefsFilteredIndices.get(index);
+                    if (dataIdx < extractedRefsData.size())
+                        setToolTipText(extractedRefsData.get(dataIdx).file);
+                } else setToolTipText(null);
+                return c;
+            }
+        });
+        extractedRefsFileList.addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting()) return;
+            int i = extractedRefsFileList.getSelectedIndex();
+            if (i >= 0 && i < extractedRefsFilteredIndices.size()) {
+                ExtractedRefEntry entry = extractedRefsData.get(extractedRefsFilteredIndices.get(i));
+                extractedRefsPathField.setText(entry.file);
+                extractedRefsPathField.setToolTipText(entry.file);
+                extractedRefsDetailModel.clear();
+                for (String ref : entry.refs) extractedRefsDetailModel.addElement(ref);
+            } else {
+                extractedRefsPathField.setText("");
+                extractedRefsPathField.setToolTipText(null);
+                extractedRefsDetailModel.clear();
+            }
+        });
+        this.extractedRefsFilterField = new JTextField(20);
+        extractedRefsFilterField.setToolTipText("Filter files by path or ref content");
+        extractedRefsFilterField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { applyExtractedRefsFilter(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { applyExtractedRefsFilter(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { applyExtractedRefsFilter(); }
+        });
+        JPanel extractedRefsLeft = new JPanel(new BorderLayout(4, 4));
+        JPanel extractedRefsFilterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        extractedRefsFilterPanel.add(new JLabel("Filter:"));
+        extractedRefsFilterPanel.add(extractedRefsFilterField);
+        extractedRefsLeft.add(extractedRefsFilterPanel, BorderLayout.NORTH);
+        extractedRefsLeft.add(new JScrollPane(extractedRefsFileList), BorderLayout.CENTER);
+        JPanel extractedRefsRight = new JPanel(new BorderLayout(4, 4));
+        JPanel extractedRefsPathPanel = new JPanel(new BorderLayout(4, 0));
+        extractedRefsPathPanel.add(new JLabel("Full path:"), BorderLayout.NORTH);
+        extractedRefsPathPanel.add(extractedRefsPathField, BorderLayout.CENTER);
+        JPanel extractedRefsPathButtons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JButton copyExtractedRefsPathBtn = new JButton("Copy path");
+        copyExtractedRefsPathBtn.addActionListener(e -> {
+            String p = extractedRefsPathField.getText();
+            if (p != null && !p.isEmpty())
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(p), null);
+        });
+        extractedRefsPathButtons.add(copyExtractedRefsPathBtn);
+        JButton copyExtractedRefsRefsBtn = new JButton("Copy refs");
+        copyExtractedRefsRefsBtn.addActionListener(e -> copySelectedFileRefs());
+        extractedRefsPathButtons.add(copyExtractedRefsRefsBtn);
+        extractedRefsPathPanel.add(extractedRefsPathButtons, BorderLayout.SOUTH);
+        extractedRefsRight.add(extractedRefsPathPanel, BorderLayout.NORTH);
+        JPanel extractedRefsDetailWrapper = new JPanel(new BorderLayout(0, 4));
+        extractedRefsDetailWrapper.add(new JLabel("Refs (one per line):"), BorderLayout.NORTH);
+        JScrollPane extractedRefsDetailScroll = new JScrollPane(extractedRefsDetailList);
+        extractedRefsDetailWrapper.add(extractedRefsDetailScroll, BorderLayout.CENTER);
+        extractedRefsRight.add(extractedRefsDetailWrapper, BorderLayout.CENTER);
+        JSplitPane extractedRefsSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, extractedRefsLeft, extractedRefsRight);
+        extractedRefsSplit.setResizeWeight(0.35);
+        extractedRefsSplit.setDividerLocation(280);
         JPanel extractedRefsPanel = new JPanel(new BorderLayout());
-        JLabel extractedRefsHint = new JLabel("File paths (hover for full path). Refs listed one per line.");
-        extractedRefsHint.setBorder(new EmptyBorder(4, 4, 4, 4));
-        extractedRefsPanel.add(extractedRefsHint, BorderLayout.NORTH);
-        extractedRefsPanel.add(new JScrollPane(extractedRefsTable), BorderLayout.CENTER);
+        extractedRefsPanel.add(extractedRefsSplit, BorderLayout.CENTER);
         resultsTabs.addTab("Extracted refs", extractedRefsPanel);
 
         // Possible CVEs
@@ -443,6 +566,7 @@ public class UnveilTab {
         controls.add(limitsPanel);
         controls.add(baselinePanel);
         controls.add(unveilPathPanel);
+        controls.add(proxyCertPanel);
         top.add(controls, BorderLayout.CENTER);
 
         JPanel center = new JPanel(new BorderLayout(0, 8));
@@ -474,6 +598,8 @@ public class UnveilTab {
             maxPerTypeSpinner.setValue(prefs.getInt("maxPerType", 500));
             String baseline = prefs.get("baselinePath", "");
             if (!baseline.isEmpty()) baselinePathField.setText(baseline);
+            String proxyHostPort = prefs.get("proxyHostPort", "");
+            if (!proxyHostPort.isEmpty()) proxyHostPortField.setText(proxyHostPort);
         } catch (Exception e) {
             logging.logToError("Load preferences: " + e.getMessage());
         }
@@ -495,6 +621,8 @@ public class UnveilTab {
             prefs.putInt("maxPerType", ((Number) maxPerTypeSpinner.getValue()).intValue());
             String baseline = baselinePathField.getText();
             prefs.put("baselinePath", baseline != null ? baseline.trim() : "");
+            String proxyHostPort = proxyHostPortField.getText();
+            prefs.put("proxyHostPort", proxyHostPort != null ? proxyHostPort.trim() : "");
         } catch (Exception e) {
             logging.logToError("Save preferences: " + e.getMessage());
         }
@@ -850,6 +978,33 @@ public class UnveilTab {
                 ? metadata.get("target").getAsString() : "—";
             summary.append("Target: ").append(target).append("\n\n");
 
+            // Specifications (PE/Mach-O/.app main binary — always show section so user knows it exists)
+            summary.append("Specifications\n");
+            JsonObject specs = report.has("specifications") ? report.getAsJsonObject("specifications") : null;
+            if (specs != null && specs.size() > 0) {
+                String[] order = new String[] {
+                    "type", "path", "bundle", "physical_size", "machine", "characteristics", "image_size",
+                    "code_size", "initialized_data_size", "linker_version", "subsystem", "dll_characteristics",
+                    "file_version", "product_version", "FileDescription", "ProductName", "LegalCopyright",
+                    "OriginalFilename", "InternalName", "stack_reserve", "stack_commit", "heap_reserve", "heap_commit",
+                    "file_type", "format", "cpu_type", "libraries_count"
+                };
+                java.util.Set<String> seen = new java.util.HashSet<>();
+                for (String key : order) {
+                    if (specs.has(key)) {
+                        summary.append("  ").append(key).append(": ").append(str(specs.get(key))).append("\n");
+                        seen.add(key);
+                    }
+                }
+                for (String key : specs.keySet()) {
+                    if (!seen.contains(key) && specs.get(key) != null && !specs.get(key).isJsonNull())
+                        summary.append("  ").append(key).append(": ").append(str(specs.get(key))).append("\n");
+                }
+            } else {
+                summary.append("  (none — use latest Unveil CLI for .app binary specs)\n");
+            }
+            summary.append("\n");
+
             // What it's made of (general: assets first, then detected frameworks)
             summary.append("What it's made of\n");
             if (report.has("discovered_assets")) {
@@ -994,7 +1149,7 @@ public class UnveilTab {
                     }
                 }
             }
-            extractedRefsModel.setRowCount(0);
+            extractedRefsData.clear();
             if (report.has("extracted_refs")) {
                 JsonArray er = report.getAsJsonArray("extracted_refs");
                 if (er != null) {
@@ -1002,21 +1157,21 @@ public class UnveilTab {
                     for (JsonElement el : er) {
                         JsonObject o = el.getAsJsonObject();
                         String file = str(o.get("file"));
-                        JsonArray refs = o.has("refs") ? o.getAsJsonArray("refs") : null;
-                        StringBuilder refsStr = new StringBuilder();
-                        if (refs != null) {
-                            for (int i = 0; i < refs.size(); i++) {
-                                if (i > 0) refsStr.append("\n");
-                                refsStr.append(refs.get(i).getAsString());
-                            }
+                        JsonArray refsArr = o.has("refs") ? o.getAsJsonArray("refs") : null;
+                        List<String> refsList = new ArrayList<>();
+                        if (refsArr != null) {
+                            for (int i = 0; i < refsArr.size(); i++)
+                                refsList.add(refsArr.get(i).getAsString());
                         }
-                        String key = file + "\t" + refsStr;
-                        if (seenRef.add(key)) {
-                            extractedRefsModel.addRow(new Object[] { file, refsStr.toString() });
-                        }
+                        String key = file + "\t" + String.join("\t", refsList);
+                        if (seenRef.add(key))
+                            extractedRefsData.add(new ExtractedRefEntry(file, refsList));
                     }
                 }
             }
+            applyExtractedRefsFilter();
+            extractedRefsPathField.setText("");
+            extractedRefsDetailModel.clear();
             possibleCvesModel.clear();
             if (report.has("possible_cves")) {
                 JsonArray pc = report.getAsJsonArray("possible_cves");
@@ -1349,6 +1504,41 @@ public class UnveilTab {
         }
     }
 
+    private void applyExtractedRefsFilter() {
+        String q = extractedRefsFilterField.getText();
+        if (q == null) q = "";
+        q = q.trim().toLowerCase();
+        extractedRefsFilteredIndices.clear();
+        extractedRefsFileListModel.clear();
+        for (int i = 0; i < extractedRefsData.size(); i++) {
+            ExtractedRefEntry e = extractedRefsData.get(i);
+            boolean match = q.isEmpty()
+                || (e.file != null && e.file.toLowerCase().contains(q));
+            if (!match && e.refs != null) {
+                for (String ref : e.refs) {
+                    if (ref != null && ref.toLowerCase().contains(q)) { match = true; break; }
+                }
+            }
+            if (match) {
+                extractedRefsFilteredIndices.add(i);
+                String display = e.shortDisplay() + " (" + e.refs.size() + " refs)";
+                extractedRefsFileListModel.addElement(display);
+            }
+        }
+    }
+
+    private void copySelectedFileRefs() {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < extractedRefsDetailModel.getSize(); i++) {
+            Object v = extractedRefsDetailModel.getElementAt(i);
+            if (v != null) sb.append(v.toString()).append("\n");
+        }
+        if (sb.length() > 0) {
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(sb.toString().trim()), null);
+            statusLabel.setText("Refs copied.");
+        }
+    }
+
     private void applyChecklistFilter() {
         TableRowSorter<?> sorter = (TableRowSorter<?>) checklistTable.getRowSorter();
         if (sorter == null) return;
@@ -1435,6 +1625,83 @@ public class UnveilTab {
             statusLabel.setText("Export failed.");
             JOptionPane.showMessageDialog(mainPanel, "Could not save: " + ex.getMessage(), "Export error", JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    private String detectProxyListener() {
+        try {
+            Object burpSuite = api.burpSuite();
+            if (burpSuite == null) return "127.0.0.1:8080";
+            java.lang.reflect.Method m = burpSuite.getClass().getMethod("exportProjectOptionsAsJson", String.class);
+            if (m == null) return "127.0.0.1:8080";
+            String json = (String) m.invoke(burpSuite, "proxy");
+            if (json != null && !json.isEmpty()) {
+                JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+                JsonObject proxy = root.has("proxy") ? root.getAsJsonObject("proxy") : null;
+                if (proxy != null && proxy.has("request_listeners")) {
+                    JsonArray listeners = proxy.getAsJsonArray("request_listeners");
+                    if (listeners != null && listeners.size() > 0) {
+                        JsonObject first = listeners.get(0).getAsJsonObject();
+                        if (first.has("listener_port")) {
+                            int port = first.get("listener_port").getAsInt();
+                            String host = "127.0.0.1";
+                            if (first.has("listen_mode")) {
+                                String mode = first.get("listen_mode").getAsString();
+                                if (mode != null && mode.contains("all_interfaces")) host = "0.0.0.0";
+                            }
+                            return host + ":" + port;
+                        }
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            logging.logToError("Proxy config read: " + t.getMessage());
+        }
+        return "127.0.0.1:8080";
+    }
+
+    private void copyProxyEnv() {
+        String hp = proxyHostPortField.getText();
+        if (hp == null) hp = "";
+        hp = hp.trim();
+        if (hp.isEmpty()) hp = "127.0.0.1:8080";
+        String url = "http://" + hp;
+        String env = "HTTP_PROXY=" + url + "\nHTTPS_PROXY=" + url + "\nhttp_proxy=" + url + "\nhttps_proxy=" + url;
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(env), null);
+        statusLabel.setText("Proxy env copied. Set in shell or thick client launcher.");
+    }
+
+    private void copyProxyUrl() {
+        String hp = proxyHostPortField.getText();
+        if (hp == null) hp = "";
+        hp = hp.trim();
+        if (hp.isEmpty()) hp = "127.0.0.1:8080";
+        String url = "http://" + hp;
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(url), null);
+        statusLabel.setText("Proxy URL copied.");
+    }
+
+    private void copyCaCertInstructions() {
+        String instructions =
+            "Burp CA certificate (for thick client TLS interception):\n\n"
+            + "1. In Burp: Proxy → Options → Proxy Listeners → Select listener → Import / export CA certificate.\n"
+            + "2. Export Certificate (DER or PEM). Save the file.\n"
+            + "3. Install the certificate as trusted in your OS or app:\n"
+            + "   - Windows: certutil -addstore Root <path> or double-click and install to Trusted Root CA.\n"
+            + "   - macOS: Keychain Access → File → Import Items → add to System keychain, then set to \"Always Trust\".\n"
+            + "   - Linux: copy to /usr/local/share/ca-certificates/ and run update-ca-certificates.\n"
+            + "4. Point the thick client at Burp proxy (host:port above). Many apps use HTTP_PROXY/HTTPS_PROXY env vars.";
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(instructions), null);
+        statusLabel.setText("CA cert instructions copied to clipboard.");
+    }
+
+    private void showProxySettingsHint() {
+        JOptionPane.showMessageDialog(mainPanel,
+            "To change the proxy listener:\n\n"
+            + "• Burp menu: Settings (or Proxy → Options)\n"
+            + "• Proxy → Options → Proxy Listeners\n\n"
+            + "Update the host:port in the field above to match your listener.",
+            "Proxy settings",
+            JOptionPane.INFORMATION_MESSAGE);
     }
 
     private void copyRawJson() {
