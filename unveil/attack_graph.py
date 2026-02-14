@@ -77,6 +77,17 @@ def build_attack_graph(
                     sendable_urls_seen.add(url_norm)
                     sendable_urls.append({"url": url_norm, "source": "extracted_ref", "label": file_path[:80]})
 
+    # Suggested order: ANCHOR then BRIDGE then BLADE; within role, chains with matched_paths first
+    ROLE_ORDER = ("ANCHOR", "BRIDGE", "BLADE")
+
+    def chain_sort_key(c):
+        role = c.get("missing_role") or ""
+        role_idx = ROLE_ORDER.index(role) if role in ROLE_ORDER else 99
+        has_paths = len(c.get("matched_paths") or []) > 0
+        return (role_idx, 0 if has_paths else 1)
+
+    chains.sort(key=chain_sort_key)
+
     return {
         "chains": chains,
         "sendable_urls": sendable_urls[:200],

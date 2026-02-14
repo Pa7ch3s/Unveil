@@ -2,7 +2,7 @@
 
 Adds an **Unveil** tab to Burp Suite: scan apps/binaries for attack surfaces, set CLI options or use the **daemon**, and view rich results (Summary with framework/asset breakdown and CVE hunt queries, Attack graph, Discovered HTML with in-panel viewer, Chainability, Extracted refs, Discovered assets, Checklist, Raw JSON) with Copy / Save / Export HTML / **Export SARIF**.
 
-## What’s in the tab (v0.6.0)
+## What’s in the tab (v0.7.0)
 
 - **Path** — Target to scan: directory, `.app`, `.exe`, `.dmg`, `.ipa`, `.apk`, `.jar`/`.war`, or file. **Browse…** to pick.
 - **Scan** — Runs the Unveil CLI (or **daemon** if enabled) with the path and options; results appear below.
@@ -43,13 +43,13 @@ cd unveil-burp
 ./gradlew jar
 ```
 
-The JAR is written to `build/libs/unveil-burp-0.6.0.jar`.
+The JAR is written to `build/libs/unveil-burp-0.7.0.jar`.
 
 ## Load in Burp
 
 1. Open Burp Suite (2023.8+ for Montoya API).
 2. **Extensions** → **Installed** → **Add** → **Extension type: Java**.
-3. Select `build/libs/unveil-burp-0.6.0.jar`.
+3. Select `build/libs/unveil-burp-0.7.0.jar`.
 4. The **Unveil** tab appears; if scan fails with “unveil not found”, set **Unveil executable (optional)** to the path from `which unveil`.
 
 ## Compressing the JSON output
@@ -59,7 +59,7 @@ The JAR is written to `build/libs/unveil-burp-0.6.0.jar`.
 - **Discovered HTML** — **View in panel** renders the selected HTML file inside Burp (avoids blank browser with file://); **Open in browser** still available.
 - **Raw JSON** remains available for tooling or archival; **Copy JSON** / **Save JSON…** / **Save compact JSON…** for sharing or CI.
 
-## Implemented (v0.6.0)
+## Implemented (v0.7.0)
 
 - **Persistent settings** — Java Preferences: unveil path, daemon URL, use daemon, option checkboxes, limits, baseline path (saved on successful scan).
 - **Daemon mode** — **Use daemon** + URL; `POST /scan` with JSON body (target, extended, offensive, max_files, max_size_mb, max_per_type). No CLI spawn.

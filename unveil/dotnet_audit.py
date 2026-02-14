@@ -5,6 +5,7 @@ Uses dnfile if available; otherwise subprocess (monodis / PowerShell) or minimal
 from pathlib import Path
 import subprocess
 import re
+import xml.etree.ElementTree as ET
 
 # Dangerous assembly refs: having these suggests deserialization/remoting risk
 DANGEROUS_ASSEMBLY_REFS = {
@@ -171,9 +172,43 @@ try {{
     return out
 
 
+def _config_hints_for_assembly(assembly_path, max_hints=10):
+    """
+    Look for same-dir .exe.config or .dll.config; parse for Type.GetType, remoting, assemblyBinding.
+    Returns list of short hint strings for report config_hints.
+    """
+    hints = []
+    p = Path(assembly_path)
+    if not p.is_file():
+        return hints
+    # Foo.exe -> Foo.exe.config, Bar.dll -> Bar.dll.config
+    config_path = p.parent / (p.name + ".config")
+    if not config_path.is_file() or config_path.stat().st_size > 500 * 1024:
+        return hints
+    try:
+        tree = ET.parse(config_path)
+        root = tree.getroot()
+        raw = ET.tostring(root, method="text", encoding="unicode", default="") or ""
+        if "Type.GetType" in raw or "GetType(" in raw:
+            hints.append("Config references Type.GetType")
+        if "remoting" in raw.lower() or "channel" in raw.lower():
+            hints.append("Config has remoting/channel")
+        if "assemblyBinding" in raw or "bindingRedirect" in raw:
+            hints.append("Config has assemblyBinding/bindingRedirect")
+        # Optional: check element tags
+        for elem in root.iter():
+            tag = (elem.tag or "").split("}")[-1]
+            if tag in ("channel", "client", "clientProviders", "assemblyBinding", "dependentAssembly"):
+                hints.append(f"Config element: {tag}")
+                break
+    except Exception:
+        pass
+    return list(dict.fromkeys(hints))[:max_hints]
+
+
 def audit_dotnet_assembly(path, max_hints=15):
     """
-    Return dict: path, assembly_name, version, refs_serialization, dangerous_hints.
+    Return dict: path, assembly_name, version, refs_serialization, dangerous_hints[, config_hints].
     dangerous_hints capped at max_hints.
     """
     path = str(Path(path).resolve())
@@ -188,6 +223,9 @@ def audit_dotnet_assembly(path, max_hints=15):
         if not out.get("assembly_name") and not out.get("dangerous_hints"):
             out["dangerous_hints"] = ["CLR assembly (install dnfile for full analysis)"]
     out["dangerous_hints"] = (out.get("dangerous_hints") or [])[:max_hints]
+    config_hints = _config_hints_for_assembly(path)
+    if config_hints:
+        out["config_hints"] = config_hints
     return out
 
 

@@ -56,4 +56,21 @@ def get_electron_info(discovered_assets):
         out["contextIsolation"] = ci
     if sb is not None:
         out["sandbox"] = sb
+    # Main entry and preload path (common keys in package.json or build config)
+    def _get_nested_str(obj, *keys):
+        for k in keys:
+            obj = (obj or {}).get(k) if isinstance(obj, dict) else None
+        return (obj or "").strip() if isinstance(obj, str) else None
+    main_entry = _get_nested_str(data, "main") or _get_nested_str(data, "config", "main")
+    if main_entry:
+        out["main"] = main_entry
+    preload = _get_nested_str(data, "preload") or _get_nested_str(data, "preloadPath") or _get_nested_str(data, "config", "preload")
+    if preload:
+        out["preload"] = preload
+    # Asar packaging (electron-builder / build.asar)
+    asar_val = data.get("asar")
+    if asar_val is None and isinstance(data.get("build"), dict):
+        asar_val = data["build"].get("asar")
+    if asar_val is not None:
+        out["asar"] = bool(asar_val) if not isinstance(asar_val, str) else (asar_val.lower() not in ("false", "0", "no"))
     return out

@@ -14,6 +14,15 @@ CHECKLIST_MAX_FILES_PER_TYPE = 80
 CHECKLIST_MAX_FINDINGS_PER_FILE = 20
 SNIPPET_LEN = 120
 
+
+def _get_context_lines():
+    """Optional ±N lines context from env UNVEIL_CHECKLIST_CONTEXT_LINES (default 0)."""
+    try:
+        n = int(os.environ.get("UNVEIL_CHECKLIST_CONTEXT_LINES", "0").strip())
+        return max(0, min(5, n))
+    except ValueError:
+        return 0
+
 # Severity: credential (high), dangerous_config (medium), informational (low)
 SEVERITY_CREDENTIAL = "credential"
 SEVERITY_DANGEROUS = "dangerous_config"
@@ -82,6 +91,15 @@ def _snippet(line: str, start: int) -> str:
     return s[:SNIPPET_LEN] + ("…" if len(s) > SNIPPET_LEN else "")
 
 
+def _context_snippet(lines: list, line_index: int, context_lines: int) -> str:
+    """Return ±context_lines around line_index, joined; for report context field."""
+    if context_lines <= 0 or not lines:
+        return ""
+    start = max(0, line_index - context_lines)
+    end = min(len(lines), line_index + context_lines + 1)
+    return "\n".join(lines[start:end]).replace("\r", "")[:800]
+
+
 def scan_file(file_path: str, asset_type: str) -> List[dict]:
     """
     Scan one file for checklist patterns. Returns list of
@@ -98,6 +116,7 @@ def scan_file(file_path: str, asset_type: str) -> List[dict]:
         return []
     findings = []
     lines = content.splitlines()
+    context_lines = _get_context_lines()
     for name, pattern, severity in _all_patterns():
         for i, line in enumerate(lines):
             if len(findings) >= CHECKLIST_MAX_FINDINGS_PER_FILE:
@@ -105,13 +124,16 @@ def scan_file(file_path: str, asset_type: str) -> List[dict]:
             m = pattern.search(line)
             if m:
                 snippet = _snippet(line, m.start())
-                findings.append({
+                rec = {
                     "file": file_path,
                     "pattern": name,
                     "snippet": snippet,
                     "line": i + 1,
                     "severity": severity,
-                })
+                }
+                if context_lines > 0:
+                    rec["context"] = _context_snippet(lines, i, context_lines)
+                findings.append(rec)
     return findings
 
 

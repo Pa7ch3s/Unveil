@@ -1,5 +1,12 @@
 from unveil.classifier import classify
-from unveil.static_parser import analyze, clear_analysis_cache, specifications_for_target, interesting_strings
+from unveil.static_parser import (
+    analyze,
+    clear_analysis_cache,
+    specifications_for_target,
+    interesting_strings,
+    build_import_summary,
+    build_packed_entropy_list,
+)
 from unveil.surface_expander import expand
 from unveil.surface_synth import synthesize
 from unveil.verdict_compiler import compile
@@ -119,6 +126,9 @@ def _empty_report(target, reason="UNKNOWN", error=None):
         "instrumentation_hints": [],
         "paths_to_watch": [],
         "paths_to_watch_note": "",
+        "import_summary": {"libraries": [], "per_file_count": 0},
+        "packed_entropy": [],
+        "non_http_refs": [],
     }
 
 
@@ -724,6 +734,9 @@ def run(
             "instrumentation_hints": build_instrumentation_hints((build_attack_graph(verdict, build_chainability(extracted_refs, discovered_assets), extracted_refs, discovered_html_apk).get("chains") or [])),
             "paths_to_watch": _paths_to_watch_from_assets(discovered_assets, results, target)[:300],
             "paths_to_watch_note": "Run ProcMon (Windows) or fs_usage (macOS) and filter for these paths to correlate static findings with runtime behavior.",
+            "import_summary": build_import_summary(results),
+            "packed_entropy": build_packed_entropy_list(results),
+            "non_http_refs": asset_discovery.collect_non_http_refs(extracted_refs, max_refs=100),
         }
 
     # -------- JAR/WAR Mode: unpack and report manifest --------
@@ -786,6 +799,9 @@ def run(
             "instrumentation_hints": [],
             "paths_to_watch": _paths_to_watch_from_assets(discovered_assets_jar, [entry], target)[:300],
             "paths_to_watch_note": "Run ProcMon (Windows) or fs_usage (macOS) and filter for these paths to correlate static findings with runtime behavior.",
+            "import_summary": {"libraries": [], "per_file_count": 0},
+            "packed_entropy": [],
+            "non_http_refs": asset_discovery.collect_non_http_refs(extracted_refs_jar, max_refs=100),
         }
 
     # -------- Single File Mode (non-DMG file) --------
@@ -838,6 +854,9 @@ def run(
             "instrumentation_hints": [],
             "paths_to_watch": _paths_to_watch_from_assets(discovered_assets, [entry], target)[:300],
             "paths_to_watch_note": "Run ProcMon (Windows) or fs_usage (macOS) and filter for these paths to correlate static findings with runtime behavior.",
+            "import_summary": build_import_summary([entry]),
+            "packed_entropy": build_packed_entropy_list([entry]),
+            "non_http_refs": [],
         }
 
     # -------- Directory Mode (or mounted DMG) --------
@@ -954,6 +973,9 @@ def run(
         "instrumentation_hints": instrumentation_hints_list,
         "paths_to_watch": paths_to_watch_list,
         "paths_to_watch_note": paths_note,
+        "import_summary": build_import_summary(results),
+        "packed_entropy": build_packed_entropy_list(results),
+        "non_http_refs": asset_discovery.collect_non_http_refs(extracted_refs, max_refs=100),
     }
     if cve_lookup:
         enrich_report_cve_lookup(report, max_queries=15, max_cves_per_query=5)

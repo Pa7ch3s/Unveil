@@ -542,6 +542,40 @@ def analyze(target):
     return result
 
 
+def build_import_summary(results, max_unique=500):
+    """
+    Build a global list of unique imported library/DLL names from analysis.imports across all results.
+    Returns {"libraries": [sorted unique names], "per_file_count": N}.
+    """
+    libs = set()
+    for r in results or []:
+        analysis = r.get("analysis") or {}
+        imp_list = analysis.get("imports") or []
+        for entry in imp_list:
+            if not isinstance(entry, dict):
+                continue
+            for name in (entry.get("imports") or []):
+                if name and isinstance(name, str) and len(name) < 300:
+                    libs.add(name.strip())
+    return {"libraries": sorted(libs)[:max_unique], "per_file_count": len(libs)}
+
+
+def build_packed_entropy_list(results, entropy_threshold=7.0, max_entries=200):
+    """
+    List files with high entropy (likely packed/compressed). Returns list of {"path": str, "entropy": float}.
+    """
+    out = []
+    for r in results or []:
+        path = r.get("file")
+        analysis = r.get("analysis") or {}
+        ent = analysis.get("entropy")
+        if path and ent is not None and isinstance(ent, (int, float)) and ent >= entropy_threshold:
+            out.append({"path": path, "entropy": round(ent, 2)})
+        if len(out) >= max_entries:
+            break
+    return out
+
+
 def tools():
     return {
         "lief": bool(lief),

@@ -45,9 +45,11 @@ Models: execution surfaces, trust boundaries, persistence anchors, and lateral b
 
 ---
 
-## Features (v0.9.0)
+## Features (v0.10.1)
 
-* **New in v0.9.0** — P0–P2 audit complete: interesting strings, ACL/permission audit, .NET assembly + dangerous API hints, cert parsing, CVE lookup (NVD), bulk Import from Proxy; instrumentation hints, custom checklist + severity, paths to watch; Burp tabs for all. CVE hunt queries in Summary (Burp); Chainability filters and context menu.
+* **v0.10.1** — Version bump (CLI 0.10.1, Burp 0.7.1).
+* **v0.10.0** — Recon depth: import summary (unique libraries), packed/entropy list, non-HTTP refs (ws://, port); Electron preload/asar from package.json; attack graph chain order (role + matched_paths); cert key_bits/algorithm; .NET config hints (Type.GetType, remoting); CVE lookup uses Electron version; checklist ±context lines; Burp Summary (import/packed/non-HTTP) and Chainability confidence column.
+* **v0.9.0** — P0–P2 audit complete: interesting strings, ACL/permission audit, .NET assembly + dangerous API hints, cert parsing, CVE lookup (NVD), bulk Import from Proxy; instrumentation hints, custom checklist + severity, paths to watch; Burp tabs for all. CVE hunt queries in Summary (Burp); Chainability filters and context menu.
 * **v0.8.0** — Attack graph (chains + sendable_urls); Burp: Attack graph tab and **Send selected to Repeater**.  
 * **v0.7.0** — Extended mode (-e) populates ATS/helpers for deeper surfaces; single-file gets full reasoning; BLADE hunt plan; configurable limits (CLI/env) and verbose logging; PE manifest extraction; Electron version/hardening in report; plist + .env ref extraction; chainability section (refs → discovered assets); **checklist scan** (potential secrets/static-analysis no-nos in config, json, env, script → `checklist_findings`); **dedupe** of discovered_assets and extracted_refs; Linux persistence (systemd, cron, autostart); JAR/WAR scan; Go/Rust/PyInstaller tags; SARIF export (-xs); diff/baseline (--baseline); daemon `POST /scan`; lief + per-run cache; tests; `--cve` for possible_cves.
 
@@ -167,7 +169,7 @@ Step-by-step commands with full syntax. Add screenshots where applicable.
 ```bash
 unveil --version
 ```
-Displays the installed version (e.g. `Unveil RADAR v0.9.0`).
+Displays the installed version (e.g. `Unveil RADAR v0.10.0`).
 
 ```bash
 unveil -h

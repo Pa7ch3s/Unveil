@@ -467,7 +467,7 @@ public class UnveilTab {
         resultsTabs.addTab("Discovered assets", discoveredAssetsPanel);
 
         // Chainability — file→ref links; filter, summary, tooltips, actions for testers
-        this.chainabilityModel = new DefaultTableModel(new String[] { "File", "Ref", "In scope", "Matched type" }, 0);
+        this.chainabilityModel = new DefaultTableModel(new String[] { "File", "Ref", "In scope", "Matched type", "Confidence" }, 0);
         this.chainabilityTable = new JTable(chainabilityModel);
         chainabilityTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         chainabilityTable.setAutoCreateRowSorter(true);
@@ -1767,6 +1767,21 @@ public class UnveilTab {
                 JsonArray pw = report.getAsJsonArray("paths_to_watch");
                 summary.append("Paths to watch: ").append(pw != null ? pw.size() : 0).append("\n");
             }
+            if (report.has("import_summary")) {
+                JsonObject im = report.getAsJsonObject("import_summary");
+                if (im != null && im.has("libraries")) {
+                    int n = im.getAsJsonArray("libraries").size();
+                    summary.append("Import summary: ").append(n).append(" libraries\n");
+                }
+            }
+            if (report.has("packed_entropy")) {
+                JsonArray pe = report.getAsJsonArray("packed_entropy");
+                summary.append("Packed/entropy: ").append(pe != null ? pe.size() : 0).append(" files\n");
+            }
+            if (report.has("non_http_refs")) {
+                JsonArray nhr = report.getAsJsonArray("non_http_refs");
+                summary.append("Non-HTTP refs: ").append(nhr != null ? nhr.size() : 0).append("\n");
+            }
             if (report.has("cve_lookup") && !report.get("cve_lookup").isJsonNull()) {
                 JsonObject cl = report.getAsJsonObject("cve_lookup");
                 if (cl != null && cl.has("queries")) {
@@ -1852,7 +1867,8 @@ public class UnveilTab {
                             str(row.get("file")),
                             str(row.get("ref")),
                             inScope ? "Yes" : "No",
-                            str(row.get("matched_type"))
+                            str(row.get("matched_type")),
+                            str(row.get("confidence"))
                         });
                     }
                 }
@@ -2519,7 +2535,7 @@ public class UnveilTab {
     }
 
     private String chainabilityValueAt(int modelRow, int col) {
-        if (modelRow < 0 || modelRow >= chainabilityModel.getRowCount() || col < 0 || col >= 4) return null;
+        if (modelRow < 0 || modelRow >= chainabilityModel.getRowCount() || col < 0 || col >= 5) return null;
         Object v = chainabilityModel.getValueAt(modelRow, col);
         return v != null ? v.toString().trim() : null;
     }

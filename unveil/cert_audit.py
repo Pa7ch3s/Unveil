@@ -23,9 +23,8 @@ def _run_openssl(cert_path: str) -> tuple:
 
 
 def _parse_openssl_text(text: str) -> dict:
-    """Parse openssl x509 -text output for Not Before, Not After, Subject, Issuer."""
+    """Parse openssl x509 -text output for Not Before, Not After, Subject, Issuer, key size, algorithm."""
     out = {}
-    # Not Before / Not After
     for line in text.splitlines():
         if "Not Before" in line:
             m = re.search(r"Not Before\s*:\s*(.+)", line)
@@ -43,6 +42,20 @@ def _parse_openssl_text(text: str) -> dict:
             m = re.search(r"Issuer:\s*(.+)", line)
             if m:
                 out["issuer"] = m.group(1).strip()[:200]
+        if "Public-Key:" in line:
+            m = re.search(r"Public-Key:\s*\((\d+)\s*bit\)", line)
+            if m:
+                out["key_bits"] = int(m.group(1))
+        if "RSA Public-Key:" in line:
+            m = re.search(r"RSA Public-Key:\s*\((\d+)\s*bit\)", line)
+            if m:
+                out["key_bits"] = int(m.group(1))
+                out["algorithm"] = "RSA"
+        if "ASN1 OID:" in line and "algorithm" not in out:
+            if "RSA" in line:
+                out["algorithm"] = "RSA"
+            elif "EC" in line or "id-ecPublicKey" in line:
+                out["algorithm"] = "EC"
     return out
 
 
@@ -98,6 +111,8 @@ def audit_cert(path: str) -> dict:
         "not_after": not_after,
         "expired": expired,
         "self_signed": self_signed,
+        "key_bits": parsed.get("key_bits"),
+        "algorithm": parsed.get("algorithm") or "",
     }
 
 

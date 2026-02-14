@@ -135,6 +135,10 @@ def enrich_report_cve_lookup(report, api_key=None, max_queries=20, max_cves_per_
     """
     api_key = api_key or os.environ.get("NVD_API_KEY", "").strip() or None
     queries = []
+    # Prepend Electron version from report so NVD lookup includes it
+    electron_version = (report.get("electron_info") or {}).get("version")
+    if electron_version and isinstance(electron_version, str) and electron_version.strip():
+        queries.append(f"Electron {electron_version.strip()}")
     if report.get("possible_cves"):
         for q in report["possible_cves"][:max_queries]:
             if isinstance(q, str) and q.strip():

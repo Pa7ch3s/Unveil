@@ -4,6 +4,20 @@
 
 - (None.)
 
+## [0.10.1] / [0.7.1] — 2026-02-13
+
+- **Version bump** — CLI 0.10.1, Burp extension 0.7.1 (release).
+
+## [0.10.0] — 2026-02-13
+
+- **Recon depth** — Report: `import_summary` (unique libraries from analysis.imports), `packed_entropy` (high-entropy files), `non_http_refs` (ws://, wss://, port-only from extracted_refs). Electron: `main`, `preload`, `asar` from package.json. Attack graph: chains ordered by role (ANCHOR/BRIDGE/BLADE) then by matched_paths. Cert audit: `key_bits`, `algorithm` in parsed output. .NET: same-dir .exe.config/.dll.config parsed for Type.GetType, remoting, assemblyBinding → `config_hints` per finding. CVE lookup: prepend "Electron {version}" from `electron_info` when present. Chainability: `confidence` (high/medium/low/none) per row. Checklist: optional ±N lines context (UNVEIL_CHECKLIST_CONTEXT_LINES), `context` on findings.
+- **CLI** — Version 0.10.0.
+
+## [0.7.0] — unveil-burp — 2026-02-13
+
+- **Summary** — Import summary, Packed/entropy, Non-HTTP refs lines. **Chainability** — Confidence column.
+- **Build** — Version 0.7.0.
+
 ## [0.9.0] — 2026-02-13
 
 - **P0–P2 Senior Tester Audit** — Interesting strings in report (URLs, IPs, paths, secret-like); ACL/permission audit (Windows icacls, macOS/Linux stat); .NET assembly name/version + dangerous API hints (dnfile/monodis/PowerShell); cert parsing (openssl, validity, self-signed, expired); CVE lookup (NVD API 2.0, optional `--cve-lookup` / NVD_API_KEY); bulk Import from Proxy for Live manipulation; instrumentation hints per surface; custom checklist patterns (UNVEIL_CHECKLIST_EXTRA) + severity (credential/dangerous_config/informational); paths to watch for process monitor correlation (ProcMon/fs_usage). Remaining work documented in `docs/REMAINING_ISSUES.md`.

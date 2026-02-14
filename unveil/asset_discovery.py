@@ -223,3 +223,34 @@ def run_reference_extraction(discovered_assets, max_files_per_type=REF_EXTRACT_M
                     file_refs[f] = set()
                 file_refs[f].update(entry.get("refs") or [])
     return [{"file": f, "refs": list(refs)[:100]} for f, refs in file_refs.items()]
+
+
+def collect_non_http_refs(extracted_refs, max_refs=100):
+    """
+    From extracted_refs, collect refs that look like non-HTTP endpoints: ws://, wss://, or port-only.
+    Returns list of {"file": path, "ref": ref_value} for report non_http_refs.
+    """
+    import re
+    out = []
+    ws_pattern = re.compile(r"wss?://[^\s\]\"'<>)\},]+", re.IGNORECASE)
+    port_only = re.compile(r"^\d{1,5}$")
+    seen = set()
+    for item in (extracted_refs or []):
+        source = item.get("file") or ""
+        for ref in (item.get("refs") or []):
+            if not ref or len(ref) > 200:
+                continue
+            ref_strip = ref.strip()
+            if ref_strip in seen:
+                continue
+            if ws_pattern.search(ref_strip):
+                seen.add(ref_strip)
+                out.append({"file": source, "ref": ref_strip})
+                if len(out) >= max_refs:
+                    return out
+            elif port_only.match(ref_strip):
+                seen.add(ref_strip)
+                out.append({"file": source, "ref": ref_strip})
+                if len(out) >= max_refs:
+                    return out
+    return out

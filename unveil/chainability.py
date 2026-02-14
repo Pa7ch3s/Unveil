@@ -56,6 +56,7 @@ def build_chainability(extracted_refs, discovered_assets):
                         in_scope = True
                         break
             matched_type = None
+            confidence = "none"
             if in_scope:
                 for atype, paths in discovered_assets.items():
                     if not isinstance(paths, list):
@@ -66,10 +67,17 @@ def build_chainability(extracted_refs, discovered_assets):
                             break
                     if matched_type:
                         break
+                if norm_ref in all_paths:
+                    confidence = "high"
+                elif ref_basename in all_basenames:
+                    confidence = "medium"
+                else:
+                    confidence = "low"
             out.append({
                 "file": source,
                 "ref": ref_str,
                 "in_scope": in_scope,
                 "matched_type": matched_type,
+                "confidence": confidence,
             })
     return out[:500]  # cap for report size
