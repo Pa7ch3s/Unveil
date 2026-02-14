@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "unveil"
-version = "0.10.1"
+version = "0.10.2"
 requires-python = ">=3.9"
 dependencies = ["pygments", "lief","pefile","fastapi","uvicorn","python-multipart"]
 authors = [{name="pa7ch3s"}]

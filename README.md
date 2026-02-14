@@ -45,8 +45,9 @@ Models: execution surfaces, trust boundaries, persistence anchors, and lateral b
 
 ---
 
-## Features (v0.10.1)
+## Features (v0.10.2)
 
+* **v0.10.2** — Thick client findings (dynamic scan results); Payload library (HackBar-style in Burp). CLI 0.10.2, Burp 0.7.2.
 * **v0.10.1** — Version bump (CLI 0.10.1, Burp 0.7.1).
 * **v0.10.0** — Recon depth: import summary (unique libraries), packed/entropy list, non-HTTP refs (ws://, port); Electron preload/asar from package.json; attack graph chain order (role + matched_paths); cert key_bits/algorithm; .NET config hints (Type.GetType, remoting); CVE lookup uses Electron version; checklist ±context lines; Burp Summary (import/packed/non-HTTP) and Chainability confidence column.
 * **v0.9.0** — P0–P2 audit complete: interesting strings, ACL/permission audit, .NET assembly + dangerous API hints, cert parsing, CVE lookup (NVD), bulk Import from Proxy; instrumentation hints, custom checklist + severity, paths to watch; Burp tabs for all. CVE hunt queries in Summary (Burp); Chainability filters and context menu.

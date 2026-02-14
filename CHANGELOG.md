@@ -4,6 +4,11 @@
 
 - (None.)
 
+## [0.10.2] / [0.7.2] — 2026-02-13
+
+- **Thick client findings** — Dynamic findings from scan (Electron, Qt, .NET, certs, chains, gaps). **Payload library** — HackBar-style payloads tab in Burp (browse by category, copy payload).
+- **Version bump** — CLI 0.10.2, Burp extension 0.7.2.
+
 ## [0.10.1] / [0.7.1] — 2026-02-13
 
 - **Version bump** — CLI 0.10.1, Burp extension 0.7.1 (release).

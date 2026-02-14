@@ -126,6 +126,15 @@ public class UnveilTab {
     private final JTextArea liveRequestArea;
     private final JTextArea liveResponseArea;
     private int liveSlotsSelectedIndex = -1;
+    private final DefaultTableModel thickClientFindingsModel;
+    private final JTable thickClientFindingsTable;
+    private final DefaultTableModel payloadLibraryModel;
+    private final JTable payloadLibraryTable;
+    private final JTextArea payloadDetailArea;
+    private final JComboBox<String> payloadCategoryFilter;
+    private final List<String> payloadLibraryPayloads = new ArrayList<>();
+    private final List<String> payloadLibraryDescriptions = new ArrayList<>();
+    private final List<Object[]> payloadLibraryFullData = new ArrayList<>();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private static final String PREFS_NODE = "unveil-burp";
     private static final int RECENT_TARGETS_MAX = 5;
@@ -837,6 +846,71 @@ public class UnveilTab {
         attackGraphPanel.add(attackGraphSplit, BorderLayout.CENTER);
         resultsTabs.addTab("Attack graph", attackGraphPanel);
 
+        // Thick client findings: dynamic results from scan (Electron, Qt, .NET, chains, etc.)
+        this.thickClientFindingsModel = new DefaultTableModel(
+            new String[] { "Category", "Title", "Summary", "Hunt suggestion", "Artifacts" }, 0);
+        this.thickClientFindingsTable = new JTable(thickClientFindingsModel);
+        thickClientFindingsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        thickClientFindingsTable.setAutoCreateRowSorter(true);
+        thickClientFindingsTable.setRowHeight(Math.max(20, thickClientFindingsTable.getRowHeight()));
+        JPanel thickClientFindingsPanel = new JPanel(new BorderLayout(4, 4));
+        thickClientFindingsPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
+        JLabel tcfLabel = new JLabel("What was found in this scan (thick-client terms). Use Attack graph + Payloads tab to confirm exploitation.");
+        tcfLabel.setForeground(Color.GRAY);
+        tcfLabel.setFont(tcfLabel.getFont().deriveFont(11f));
+        thickClientFindingsPanel.add(tcfLabel, BorderLayout.NORTH);
+        thickClientFindingsPanel.add(new JScrollPane(thickClientFindingsTable), BorderLayout.CENTER);
+        resultsTabs.addTab("Thick client findings", thickClientFindingsPanel);
+
+        // Payloads (HackBar-style): browse by category, copy payload
+        this.payloadDetailArea = new JTextArea(8, 60);
+        payloadDetailArea.setEditable(false);
+        payloadDetailArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        payloadDetailArea.setLineWrap(true);
+        this.payloadLibraryModel = new DefaultTableModel(
+            new String[] { "Name", "Category", "Type", "Reference" }, 0);
+        this.payloadLibraryTable = new JTable(payloadLibraryModel);
+        payloadLibraryTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        payloadLibraryTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        payloadLibraryTable.getSelectionModel().addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting()) return;
+            int row = payloadLibraryTable.getSelectedRow();
+            if (row < 0) { payloadDetailArea.setText(""); return; }
+            int modelRow = payloadLibraryTable.convertRowIndexToModel(row);
+            String payload = modelRow < payloadLibraryPayloads.size() ? payloadLibraryPayloads.get(modelRow) : "";
+            String desc = modelRow < payloadLibraryDescriptions.size() ? payloadLibraryDescriptions.get(modelRow) : "";
+            payloadDetailArea.setText((desc.isEmpty() ? "" : desc + "\n\n--- Payload ---\n\n") + payload);
+        });
+        this.payloadCategoryFilter = new JComboBox<>(new String[] { "All", "Electron", "Qt", ".NET", "Persistence", "Network", "JAR", "Other" });
+        payloadCategoryFilter.addActionListener(e -> applyPayloadLibraryFilter());
+        JPanel payloadLibraryToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        payloadLibraryToolbar.add(new JLabel("Category:"));
+        payloadLibraryToolbar.add(payloadCategoryFilter);
+        JButton copyPayloadBtn = new JButton("Copy payload");
+        copyPayloadBtn.addActionListener(e -> {
+            String sel = payloadDetailArea.getSelectedText();
+            String text = (sel != null && !sel.isEmpty()) ? sel : payloadDetailArea.getText();
+            if (text != null && !text.isEmpty()) {
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new java.awt.datatransfer.StringSelection(text), null);
+                statusLabel.setText("Payload copied to clipboard.");
+            }
+        });
+        payloadLibraryToolbar.add(copyPayloadBtn);
+        JPanel payloadLibraryPanel = new JPanel(new BorderLayout(4, 4));
+        payloadLibraryPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
+        payloadLibraryPanel.add(payloadLibraryToolbar, BorderLayout.NORTH);
+        JSplitPane payloadSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
+            new JScrollPane(payloadLibraryTable),
+            new JScrollPane(payloadDetailArea));
+        payloadSplit.setResizeWeight(0.5);
+        payloadSplit.setOneTouchExpandable(true);
+        payloadLibraryPanel.add(payloadSplit, BorderLayout.CENTER);
+        JLabel payloadLibLabel = new JLabel("Thick-client payload library (HackBar-style). Select a row to view; copy and use with your target.");
+        payloadLibLabel.setForeground(Color.GRAY);
+        payloadLibLabel.setFont(payloadLibLabel.getFont().deriveFont(11f));
+        payloadLibraryPanel.add(payloadLibLabel, BorderLayout.SOUTH);
+        resultsTabs.addTab("Payloads", payloadLibraryPanel);
+
         // Live manipulation: per-URL slots with request/response edit and Send (Repeater-grade)
         this.liveRequestArea = new JTextArea(12, 70);
         liveRequestArea.setEditable(true);
@@ -1209,6 +1283,11 @@ public class UnveilTab {
         possibleCvesModel.clear();
         checklistModel.setRowCount(0);
         checklistFilterField.setText("");
+        thickClientFindingsModel.setRowCount(0);
+        payloadLibraryModel.setRowCount(0);
+        payloadLibraryFullData.clear();
+        payloadLibraryPayloads.clear();
+        payloadLibraryDescriptions.clear();
         attackGraphChainsModel.setRowCount(0);
         attackGraphPayloadsByRow.clear();
         sendableUrlsModel.setRowCount(0);
@@ -2159,6 +2238,55 @@ public class UnveilTab {
                 liveRequestArea.setText(s.requestText != null ? s.requestText : "");
                 liveResponseArea.setText(s.responseText != null ? s.responseText : "");
             }
+            thickClientFindingsModel.setRowCount(0);
+            if (report.has("thick_client_findings")) {
+                JsonArray tcf = report.getAsJsonArray("thick_client_findings");
+                if (tcf != null) {
+                    for (JsonElement el : tcf) {
+                        if (el.isJsonObject()) {
+                            JsonObject o = el.getAsJsonObject();
+                            String category = str(o.get("category"));
+                            String title = str(o.get("title"));
+                            String tcfSummary = str(o.get("summary"));
+                            String hunt = str(o.get("hunt_suggestion"));
+                            String artifacts = "";
+                            if (o.has("artifacts") && o.get("artifacts").isJsonArray()) {
+                                JsonArray arr = o.getAsJsonArray("artifacts");
+                                StringBuilder sb = new StringBuilder();
+                                for (int i = 0; i < Math.min(5, arr.size()); i++) {
+                                    if (i > 0) sb.append("; ");
+                                    sb.append(arr.get(i).isJsonPrimitive() ? arr.get(i).getAsString() : "");
+                                }
+                                if (arr.size() > 5) sb.append("...");
+                                artifacts = sb.toString();
+                            }
+                            thickClientFindingsModel.addRow(new Object[] { category, title, tcfSummary, hunt, artifacts });
+                        }
+                    }
+                }
+            }
+            payloadLibraryFullData.clear();
+            payloadLibraryPayloads.clear();
+            payloadLibraryDescriptions.clear();
+            payloadLibraryModel.setRowCount(0);
+            if (report.has("payload_library")) {
+                JsonArray pl = report.getAsJsonArray("payload_library");
+                if (pl != null) {
+                    for (JsonElement el : pl) {
+                        if (el.isJsonObject()) {
+                            JsonObject o = el.getAsJsonObject();
+                            String name = str(o.get("name"));
+                            String category = str(o.get("category"));
+                            String type = str(o.get("type"));
+                            String reference = str(o.get("reference"));
+                            String payload = str(o.get("payload"));
+                            String description = str(o.get("description"));
+                            payloadLibraryFullData.add(new Object[] { name, category, type, reference, payload, description });
+                        }
+                    }
+                }
+            }
+            applyPayloadLibraryFilter();
             addFindingsToTarget(report);
         } catch (Exception e) {
             logging.logToError("Unveil report parse error: " + e.getMessage());
@@ -2531,6 +2659,21 @@ public class UnveilTab {
             sorter.setRowFilter(null);
         } else {
             sorter.setRowFilter(RowFilter.andFilter(filters));
+        }
+    }
+
+    private void applyPayloadLibraryFilter() {
+        String cat = payloadCategoryFilter.getSelectedItem() != null ? payloadCategoryFilter.getSelectedItem().toString() : "All";
+        payloadLibraryModel.setRowCount(0);
+        payloadLibraryPayloads.clear();
+        payloadLibraryDescriptions.clear();
+        for (Object[] row : payloadLibraryFullData) {
+            if (row == null || row.length < 6) continue;
+            String rowCat = row[1] != null ? row[1].toString() : "";
+            if (!"All".equals(cat) && !cat.equals(rowCat)) continue;
+            payloadLibraryModel.addRow(new Object[] { row[0], row[1], row[2], row[3] });
+            payloadLibraryPayloads.add(row[4] != null ? row[4].toString() : "");
+            payloadLibraryDescriptions.add(row[5] != null ? row[5].toString() : "");
         }
     }
 
