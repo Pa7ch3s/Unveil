@@ -29,6 +29,7 @@ tasks.jar {
         )
     }
     archiveBaseName.set("unveil-burp")
+    archiveVersion.set(version.toString())
     // Include dependencies (e.g. Gson) so the extension loads; exclude Montoya (Burp provides it)
     val runtimeJars = configurations.runtimeClasspath.get().filter { f: java.io.File -> !f.name.contains("montoya") }
     from(runtimeJars.map { zipTree(it) }) {
