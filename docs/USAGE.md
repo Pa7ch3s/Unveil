@@ -12,7 +12,7 @@ Step-by-step commands with full syntax. Add a screenshot below each example if d
 unveil --version
 ```
 
-Displays the installed Unveil version (e.g. `Unveil RADAR v0.8.0`).
+Displays the installed Unveil version (e.g. `Unveil RADAR v0.8.4`).
 
 ---
 

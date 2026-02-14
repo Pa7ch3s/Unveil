@@ -77,7 +77,7 @@
 
 ## 4. Code Quality & Safety
 
-- **Version string:** **Fixed.** Single source: `pyproject.toml` version; CLI reads via `importlib.metadata.version("unveil")` (fallback `0.7.0`). Banner and `--version` are dynamic.
+- **Version string:** **Fixed.** Single source: `pyproject.toml` version; CLI reads via `importlib.metadata.version("unveil")` (fallback `0.8.4`). Banner and `--version` are dynamic.
 - **Error handling:** DMG mount/unmount and ZIP unpacking use broad `except` or ignore errors; consider logging and clearer user messages (e.g. “DMG mount failed: …”).
 - **JSON output:** Always emitted to stdout when not using `-q` (pretty-printed). With `-xj`/`-xx` the same content is also written to a file; behavior is consistent but could be documented (e.g. “JSON is always printed unless `-q`; `-xj`/`-xx` additionally write to file”).
 

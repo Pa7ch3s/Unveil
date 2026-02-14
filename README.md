@@ -45,9 +45,10 @@ Models: execution surfaces, trust boundaries, persistence anchors, and lateral b
 
 ---
 
-## Features (v0.8.0)
+## Features (v0.8.4)
 
-* **New in v0.8.0** — Attack graph (chains + sendable_urls); Burp: Attack graph tab and **Send selected to Repeater**.  
+* **New in v0.8.4** — CVE hunt queries in Summary tab (Burp); Chainability filters and context menu for testers.
+* **v0.8.0** — Attack graph (chains + sendable_urls); Burp: Attack graph tab and **Send selected to Repeater**.  
 * **v0.7.0** — Extended mode (-e) populates ATS/helpers for deeper surfaces; single-file gets full reasoning; BLADE hunt plan; configurable limits (CLI/env) and verbose logging; PE manifest extraction; Electron version/hardening in report; plist + .env ref extraction; chainability section (refs → discovered assets); **checklist scan** (potential secrets/static-analysis no-nos in config, json, env, script → `checklist_findings`); **dedupe** of discovered_assets and extracted_refs; Linux persistence (systemd, cron, autostart); JAR/WAR scan; Go/Rust/PyInstaller tags; SARIF export (-xs); diff/baseline (--baseline); daemon `POST /scan`; lief + per-run cache; tests; `--cve` for possible_cves.
 
 * **Mobile (APK / IPA)** — Point at an `.apk` or `.ipa`; Unveil unpacks it, then runs the full radar on native libs (APK) or `.app` bundles (IPA).
@@ -115,7 +116,7 @@ Step-by-step commands with full syntax. Add screenshots where applicable.
 ```bash
 unveil --version
 ```
-Displays the installed version (e.g. `Unveil RADAR v0.8.0`).
+Displays the installed version (e.g. `Unveil RADAR v0.8.4`).
 
 ```bash
 unveil -h
@@ -293,6 +294,10 @@ Extended expansion, offensive synthesis, and indented JSON export in one run.
 Extended usage (same content): **[docs/USAGE.md](docs/USAGE.md)**.
 
 ---
+
+## Author
+
+pa7ch3s
 
 ## License
 

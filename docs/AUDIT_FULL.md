@@ -12,19 +12,18 @@
 
 ### Version and single source of truth
 
-| Location | Before | After |
-|----------|--------|--------|
-| `pyproject.toml` | `0.7.0` | ✅ Kept |
-| `unveil/cli.py` | Reads via `importlib.metadata.version("unveil")`, fallback `0.7.0` | ✅ Correct |
-| `unveil/sarif_export.py` | Hardcoded `"0.7.0"` | ✅ **Fixed:** uses `_UNVEIL_VERSION` from importlib.metadata |
-| `unveil/assets/banner.txt` | No version line (version printed by CLI) | ✅ Correct |
-| `docs/AUDIT.md` | Mentioned obsolete "v0.6.0" | ✅ **Fixed:** noted as fixed, single source |
+| Location | Current (as of 0.8.4) |
+|----------|------------------------|
+| `pyproject.toml` | `0.8.4` |
+| `unveil/cli.py` | Reads via `importlib.metadata.version("unveil")`, fallback `0.8.4` |
+| `unveil/sarif_export.py` | `_UNVEIL_VERSION` from importlib.metadata, fallback `0.8.4` |
+| `unveil/assets/banner.txt` | No version line (version printed by CLI) |
 
 ### Documentation alignment
 
-- **README.md** — Features (v0.7.0) updated to include checklist scan and dedupe; flag table already had `-xs`, `--baseline`, `--cve`. ✅
-- **docs/USAGE.md** — Quick reference lacked `-xs`, `-V`, `--max-*`, `--baseline`, `--cve`; target lacked `.jar`/`.war`. ✅ **Fixed:** added §18 SARIF, §19 baseline; full flag table.
-- **CHANGELOG.md** — 0.7.0 now includes checklist and dedupe; added [0.3.0] for Burp (Checklist tab, Target issues, UI dedupe). ✅
+- **README.md** — Features (v0.8.4); flag table has `-xs`, `--baseline`, `--cve`.
+- **docs/USAGE.md** — Quick reference and version example (v0.8.4).
+- **CHANGELOG.md** — [0.8.4] / [0.5.3] for CVE in Summary and Chainability; historical entries preserved.
 
 ### Bugs / consistency
 
@@ -42,13 +41,13 @@
 
 ### Version
 
-- **build.gradle.kts** — `version = "0.3.0"`. ✅
-- **README** — "v0.3.0" throughout; JAR name `unveil-burp-0.3.0.jar`. ✅
+- **build.gradle.kts** — `version = "0.5.3"`.
+- **README** — "v0.5.3" throughout; JAR name `unveil-burp-0.5.3.jar`.
 
 ### Documentation alignment
 
-- **Results tabs** — README now lists **Checklist** (potential secrets/static-analysis no-nos). ✅
-- **Implemented (v0.3.0)** — Added: Checklist tab; Target/Site Map (audit issues); UI dedupe for assets and refs. ✅
+- **Results tabs** — README lists Summary (with CVE hunt queries), Chainability, Checklist, Attack graph, etc. **Possible CVEs** tab removed (CVE queries in Summary).
+- **Implemented (v0.5.3)** — CVE in Summary; Chainability filters/context menu; Checklist; Target/Site Map; UI dedupe.
 - **Forward-thinking** — "Burp Scanner issues" removed (implemented as Target/Site Map); list renumbered. Roadmap updated: "Scanner issues / Target already implemented." ✅
 
 ### Consistency with CLI
@@ -61,7 +60,7 @@
 
 ### Repository (github.com/Pa7ch3s/Unveil)
 
-- README, supported formats, features, install, usage, and flag table match local README (v0.7.0, SARIF, baseline, CVE). ✅
+- README, supported formats, features, install, usage, and flag table match local README (v0.8.4, SARIF, baseline, CVE).
 - No separate "GitHub Pages" site was reachable at `https://pa7ch3s.github.io/Unveil/` at audit time. Primary documentation is the repo (README, `docs/`, `unveil-burp/README.md`).
 
 ### Recommendation
@@ -75,12 +74,12 @@
 | Area | Change |
 |------|--------|
 | **docs/AUDIT.md** | Version finding → Fixed; Double walk / Hardcoded limits → Fixed. |
-| **README.md** | v0.7.0 features: added checklist scan and dedupe. |
-| **CHANGELOG.md** | 0.7.0: checklist, dedupe; new [0.3.0] Burp: Checklist tab, Target issues, UI dedupe. |
+| **README.md** | v0.8.4 features; CVE in Summary, Chainability. |
+| **CHANGELOG.md** | [0.8.4]/[0.5.3] CVE in Summary, Chainability; historical [0.7.0]/[0.3.0] preserved. |
 | **unveil-burp/README.md** | Checklist in tabs; Implemented: Checklist, Target, UI dedupe; Forward-thinking/Roadmap updated. |
 | **docs/USAGE.md** | §18 SARIF (-xs), §19 baseline; full flag table including -xs, -V, --max-*, --baseline, --cve; target .jar/.war. |
 | **unveil/renderer.py** | Checklist section in HTML report; `env` in discovered-assets types. |
-| **unveil/sarif_export.py** | Tool version from importlib.metadata (no hardcoded 0.7.0). |
+| **unveil/sarif_export.py** | Tool version from importlib.metadata (fallback 0.8.4). |
 
 ---
 
@@ -88,8 +87,8 @@
 
 | Component | Version |
 |-----------|---------|
-| CLI (pyproject.toml, unveil) | 0.7.0 |
-| Burp extension (build.gradle.kts, JAR) | 0.3.0 |
+| CLI (pyproject.toml, unveil) | 0.8.4 |
+| Burp extension (build.gradle.kts, JAR) | 0.5.3 |
 | SARIF / CLI banner | Dynamic from package metadata |
 
 All references to 0.6.0 removed; AUDIT and CHANGELOG reflect current behavior and fixes.

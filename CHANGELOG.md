@@ -4,6 +4,15 @@
 
 - (None.)
 
+## [0.8.4] — 2026-02-13
+
+- **CLI** — Version 0.8.4 (pyproject.toml). Fallback version in cli.py/sarif_export.py aligned.
+- **Burp extension 0.5.3** — CVE hunt queries moved into **Summary** tab (no separate Possible CVEs tab); resizable split between summary text and CVE list. Chainability: filter (File/Ref), In-scope dropdown, row summary, tooltips, colored In scope column, context menu (Copy path/ref, Open ref as URL, Open file). Fix duplicate menu variable.
+
+## [0.5.3] — unveil-burp — 2026-02-13
+
+- CVE hunt queries in Summary tab (split pane); Possible CVEs tab removed. Chainability: filters, summary label, tooltips, In scope coloring, context menu (Copy, Open URL/file).
+
 ## [0.8.1] — 2026-02-13
 
 - Version bump. Burp extension 0.4.1: rebuild JAR and **reload the extension** in Burp to see current UI (no Hunt plan tab; Attack graph is visual; Discovered HTML has View in panel). **Unveil CLI:** label in the tab shows the CLI version from `unveil --version`.
