@@ -1,3 +1,31 @@
+# Plain-language labels for thick-client testing (ANCHOR/BRIDGE/BLADE).
+# Shown in report and UI so non-experts understand what to do next.
+ROLE_LABELS = {
+    "ANCHOR": "Persistence / foothold",
+    "BRIDGE": "Lateral movement",
+    "BLADE": "Code execution",
+}
+ROLE_DESCRIPTIONS = {
+    "ANCHOR": "Get a way to run again (e.g. on next launch) or influence what the app loads.",
+    "BRIDGE": "Move from one process or privilege level to another (helpers, network, IPC).",
+    "BLADE": "Execute attacker-controlled code inside the app (renderer, main process, etc.).",
+}
+
+# Human-readable names for the actual vulnerable component/surface (shown first in UI).
+SURFACE_LABELS = {
+    "electron_preload": "Electron preload.js",
+    "preload_write": "Electron preload write / ASAR",
+    "electron_asar_preload": "Electron ASAR / preload path",
+    "electron_helper": "Electron helper process",
+    "network_mitm": "Network / TLS (MITM)",
+    "qt_rpath_plugin_drop": "Qt plugin dir / rpath",
+    "macos_launch_persistence": "macOS LaunchAgent / XPC",
+    "windows_persistence": "Windows Run / Services / Tasks",
+    "dotnet_managed": ".NET managed / assembly load",
+    "linux_persistence": "Linux systemd / cron / autostart",
+    "jar_archive": "JAR / Java archive",
+}
+
 MISSING_LINK_TEMPLATES = {
     "ANCHOR": [
         {

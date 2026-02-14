@@ -1,8 +1,12 @@
 """
 Attack graph: chains (missing role → surface → hunt targets) and sendable URLs for Repeater.
+Includes plain-language role labels for thick-client testing.
 """
 import re
 from typing import List, Dict, Any
+
+from unveil.missing_link_engine import ROLE_LABELS, ROLE_DESCRIPTIONS, SURFACE_LABELS
+from unveil.payloads import get_payloads_for_surface
 
 URL_PATTERN = re.compile(r"https?://[^\s\]\"'<>)\},]+", re.IGNORECASE)
 
@@ -43,12 +47,20 @@ def build_attack_graph(
             if url_norm not in sendable_urls_seen and url_norm.startswith(("http://", "https://")):
                 sendable_urls_seen.add(url_norm)
                 sendable_urls.append({"url": url_norm, "source": "hunt_plan", "label": suggested_surface or missing_role})
+        role_label = ROLE_LABELS.get(missing_role) or missing_role
+        role_description = ROLE_DESCRIPTIONS.get(missing_role) or ""
+        component_label = SURFACE_LABELS.get(suggested_surface) or suggested_surface or role_label
+        suggested_payloads = get_payloads_for_surface(suggested_surface)
         chains.append({
             "missing_role": missing_role,
+            "missing_role_label": role_label,
+            "missing_role_description": role_description,
             "suggested_surface": suggested_surface,
+            "component_label": component_label,
             "hunt_targets": hunt_targets_str,
             "reason": reason,
             "matched_paths": entry.get("matched_paths") or [],
+            "suggested_payloads": suggested_payloads,
         })
 
     # ---- Sendable URLs from extracted_refs
