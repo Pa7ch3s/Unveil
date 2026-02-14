@@ -1,5 +1,5 @@
 from unveil.classifier import classify
-from unveil.static_parser import analyze, clear_analysis_cache
+from unveil.static_parser import analyze, clear_analysis_cache, specifications_for_target
 from unveil.surface_expander import expand
 from unveil.surface_synth import synthesize
 from unveil.verdict_compiler import compile
@@ -641,6 +641,7 @@ def run(
             shutil.rmtree(unpack_dir, ignore_errors=True)
         return {
             "metadata": {"target": target},
+            "specifications": specifications_for_target(target) or {},
             "results": results,
             "verdict": verdict,
             "findings": findings,
@@ -695,6 +696,7 @@ def run(
             shutil.rmtree(tmp, ignore_errors=True)
         return {
             "metadata": {"target": target},
+            "specifications": specifications_for_target(target) or {},
             "results": [entry],
             "verdict": verdict,
             "findings": findings,
@@ -731,6 +733,7 @@ def run(
         checklist_single = run_checklist(discovered_assets)
         return {
             "metadata": {"target": target},
+            "specifications": specifications_for_target(target) or {},
             "results": [entry],
             "verdict": verdict,
             "findings": findings,
@@ -796,6 +799,7 @@ def run(
         verdict["hunt_plan"] = enrich_hunt_plan_with_matched_paths(verdict["hunt_plan"], discovered_assets)
     return {
         "metadata": {"target": target},
+        "specifications": specifications_for_target(target) or {},
         "results": results,
         "verdict": verdict,
         "findings": findings,
