@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "unveil"
-version = "0.5.0"
+version = "0.5.2"
 
 repositories {
     mavenCentral()

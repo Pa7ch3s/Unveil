@@ -90,6 +90,7 @@ public class UnveilTab {
     private final JTable checklistTable;
     private final JTextField checklistFilterField;
     private final DefaultTableModel attackGraphChainsModel;
+    private final List<List<PoCPayloadEntry>> attackGraphPayloadsByRow = new ArrayList<>();
     private final DefaultTableModel sendableUrlsModel;
     private final JTable sendableUrlsTable;
     private final JScrollPane attackGraphScrollPane;
@@ -117,6 +118,21 @@ public class UnveilTab {
             String[] parts = file.split("/");
             if (parts.length >= 2) return parts[parts.length - 2] + "/" + parts[parts.length - 1];
             return parts[parts.length - 1];
+        }
+    }
+
+    private static final class PoCPayloadEntry {
+        final String name;
+        final String description;
+        final String type;
+        final String payload;
+        final String reference;
+        PoCPayloadEntry(String name, String description, String type, String payload, String reference) {
+            this.name = name != null ? name : "";
+            this.description = description != null ? description : "";
+            this.type = type != null ? type : "";
+            this.payload = payload != null ? payload : "";
+            this.reference = reference != null ? reference : "";
         }
     }
 
@@ -559,7 +575,7 @@ public class UnveilTab {
 
         // Attack graph: visual chains + sendable URLs (one-click Send to Repeater)
         this.attackGraphChainsModel = new DefaultTableModel(
-            new String[] { "Missing role", "Surface", "Hunt targets", "Reason", "Matched paths" }, 0);
+            new String[] { "Vulnerable component", "Hunt targets", "Reason", "Matched paths" }, 0);
         this.sendableUrlsModel = new DefaultTableModel(new String[] { "URL", "Source", "Label" }, 0);
         this.sendableUrlsTable = new JTable(sendableUrlsModel);
         sendableUrlsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
@@ -571,27 +587,43 @@ public class UnveilTab {
         attackGraphPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
         JPanel chainsPanel = new JPanel(new BorderLayout());
         chainsPanel.setBorder(new EmptyBorder(4, 8, 8, 8));
-        chainsPanel.add(new JLabel("Chains: missing role → surface → hunt targets (with matched paths from scan). Scroll to see all."), BorderLayout.NORTH);
-        // Constrain graph area height so the scroll pane gets a bounded viewport and shows scrollbars
-        JPanel graphScrollWrapper = new JPanel(new BorderLayout());
-        int graphAreaHeight = 480;
-        graphScrollWrapper.setPreferredSize(new Dimension(Integer.MAX_VALUE, graphAreaHeight));
-        graphScrollWrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, graphAreaHeight));
-        graphScrollWrapper.setMinimumSize(new Dimension(200, 120));
+        JPanel chainsHeader = new JPanel(new BorderLayout(4, 2));
+        chainsHeader.add(new JLabel("Chains: vulnerable component → what to hunt (paths from scan). Use \"View PoC payloads\" to confirm exploitation."), BorderLayout.NORTH);
+        JLabel chainsLegend = new JLabel("<html><span style='font-size:10px;color:gray'>First column = actual component/surface found; preconfigured payloads available per chain to confirm basic exploitation.</span></html>");
+        chainsLegend.setToolTipText("Select a row and click View PoC payloads for preconfigured steps or payloads to confirm the attack surface.");
+        chainsHeader.add(chainsLegend, BorderLayout.CENTER);
+        JPanel chainsBtnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        JButton viewPocPayloadsBtn = new JButton("View PoC payloads");
+        viewPocPayloadsBtn.setToolTipText("Show preconfigured payloads for the selected chain to confirm basic exploitation");
+        viewPocPayloadsBtn.addActionListener(e -> showPocPayloadsForSelectedChain());
+        chainsBtnPanel.add(viewPocPayloadsBtn);
+        chainsHeader.add(chainsBtnPanel, BorderLayout.SOUTH);
+        chainsPanel.add(chainsHeader, BorderLayout.NORTH);
         this.attackGraphScrollPane = new JScrollPane(new AttackGraphPaintPanel(attackGraphChainsModel));
         attackGraphScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         attackGraphScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         attackGraphScrollPane.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-        graphScrollWrapper.add(attackGraphScrollPane, BorderLayout.CENTER);
-        chainsPanel.add(graphScrollWrapper, BorderLayout.CENTER);
+        // Smoother scroll: one row per wheel tick, larger block for PgUp/PgDn
+        JScrollBar vBar = attackGraphScrollPane.getVerticalScrollBar();
+        vBar.setUnitIncrement(24);
+        vBar.setBlockIncrement(200);
+        JScrollBar hBar = attackGraphScrollPane.getHorizontalScrollBar();
+        hBar.setUnitIncrement(24);
+        hBar.setBlockIncrement(120);
+        chainsPanel.add(attackGraphScrollPane, BorderLayout.CENTER);
+        chainsPanel.setMinimumSize(new Dimension(200, 160));
         JPanel sendablePanel = new JPanel(new BorderLayout(4, 4));
         JPanel sendableToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         sendableToolbar.add(new JLabel("Sendable URLs (from refs / attack graph):"));
         sendableToolbar.add(sendToRepeaterBtn);
         sendablePanel.add(sendableToolbar, BorderLayout.NORTH);
         sendablePanel.add(new JScrollPane(sendableUrlsTable), BorderLayout.CENTER);
-        attackGraphPanel.add(chainsPanel, BorderLayout.NORTH);
-        attackGraphPanel.add(sendablePanel, BorderLayout.CENTER);
+        sendablePanel.setMinimumSize(new Dimension(200, 120));
+        JSplitPane attackGraphSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, chainsPanel, sendablePanel);
+        attackGraphSplit.setResizeWeight(0.65);
+        attackGraphSplit.setOneTouchExpandable(true);
+        attackGraphSplit.setDividerLocation(0.65);
+        attackGraphPanel.add(attackGraphSplit, BorderLayout.CENTER);
         resultsTabs.addTab("Attack graph", attackGraphPanel);
 
         // Live manipulation: per-URL slots with request/response edit and Send (Repeater-grade)
@@ -913,6 +945,7 @@ public class UnveilTab {
         checklistModel.setRowCount(0);
         checklistFilterField.setText("");
         attackGraphChainsModel.setRowCount(0);
+        attackGraphPayloadsByRow.clear();
         sendableUrlsModel.setRowCount(0);
         liveSlots.clear();
         liveSlotsListModel.clear();
@@ -1470,6 +1503,7 @@ public class UnveilTab {
             checklistFilterField.setText("");
             applyChecklistFilter();
             attackGraphChainsModel.setRowCount(0);
+            attackGraphPayloadsByRow.clear();
             sendableUrlsModel.setRowCount(0);
             liveSlots.clear();
             liveSlotsListModel.clear();
@@ -1495,13 +1529,27 @@ public class UnveilTab {
                                         }
                                         matchedPaths = sb.toString();
                                     }
+                                    String componentLabel = str(row.get("component_label"));
+                                    if (componentLabel == null || componentLabel.isEmpty()) componentLabel = str(row.get("suggested_surface"));
+                                    if (componentLabel == null || componentLabel.isEmpty()) componentLabel = str(row.get("missing_role_label"));
                                     attackGraphChainsModel.addRow(new Object[] {
-                                        str(row.get("missing_role")),
-                                        str(row.get("suggested_surface")),
+                                        componentLabel,
                                         str(row.get("hunt_targets")),
                                         str(row.get("reason")),
                                         matchedPaths
                                     });
+                                    List<PoCPayloadEntry> payloads = new ArrayList<>();
+                                    if (row.has("suggested_payloads") && row.get("suggested_payloads").isJsonArray()) {
+                                        for (JsonElement pe : row.getAsJsonArray("suggested_payloads")) {
+                                            if (pe.isJsonObject()) {
+                                                JsonObject p = pe.getAsJsonObject();
+                                                payloads.add(new PoCPayloadEntry(
+                                                    str(p.get("name")), str(p.get("description")),
+                                                    str(p.get("type")), str(p.get("payload")), str(p.get("reference"))));
+                                            }
+                                        }
+                                    }
+                                    attackGraphPayloadsByRow.add(payloads);
                                 }
                             }
                         }
@@ -1668,6 +1716,65 @@ public class UnveilTab {
             }
         }
         statusLabel.setText("Sent " + sent + " request(s) to Repeater.");
+    }
+
+    private void showPocPayloadsForSelectedChain() {
+        int n = attackGraphChainsModel.getRowCount();
+        if (n == 0) {
+            statusLabel.setText("Run a scan first to see chains and PoC payloads.");
+            return;
+        }
+        JDialog dialog = new JDialog((java.awt.Frame) null, "Preconfigured PoC payloads — confirm exploitation", false);
+        dialog.setLayout(new BorderLayout(8, 8));
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        top.add(new JLabel("Chain (vulnerable component):"));
+        String[] chainLabels = new String[n];
+        for (int i = 0; i < n; i++) {
+            Object o = attackGraphChainsModel.getValueAt(i, 0);
+            chainLabels[i] = (i + 1) + ". " + (o != null ? o.toString() : "");
+        }
+        JComboBox<String> chainCombo = new JComboBox<>(chainLabels);
+        chainCombo.setPreferredSize(new Dimension(380, 24));
+        top.add(chainCombo);
+        dialog.add(top, BorderLayout.NORTH);
+        JTextArea payloadArea = new JTextArea(14, 60);
+        payloadArea.setEditable(false);
+        payloadArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 11));
+        payloadArea.setLineWrap(true);
+        payloadArea.setWrapStyleWord(true);
+        JScrollPane payloadScroll = new JScrollPane(payloadArea);
+        JButton copyBtn = new JButton("Copy to clipboard");
+        copyBtn.addActionListener(e -> {
+            String t = payloadArea.getText();
+            if (t != null && !t.isEmpty())
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(t), null);
+        });
+        JPanel center = new JPanel(new BorderLayout(4, 4));
+        center.add(payloadScroll, BorderLayout.CENTER);
+        center.add(copyBtn, BorderLayout.SOUTH);
+        dialog.add(center, BorderLayout.CENTER);
+        java.util.function.Consumer<Integer> update = idx -> {
+            StringBuilder sb = new StringBuilder();
+            if (idx >= 0 && idx < attackGraphPayloadsByRow.size()) {
+                List<PoCPayloadEntry> list = attackGraphPayloadsByRow.get(idx);
+                if (list.isEmpty()) sb.append("No preconfigured payloads for this chain.");
+                else for (PoCPayloadEntry p : list) {
+                    sb.append("--- ").append(p.name).append(" ---\n");
+                    if (!p.description.isEmpty()) sb.append(p.description).append("\n");
+                    if (!p.type.isEmpty()) sb.append("Type: ").append(p.type).append("\n");
+                    if (!p.reference.isEmpty()) sb.append("Ref: ").append(p.reference).append("\n");
+                    sb.append("\n").append(p.payload).append("\n\n");
+                }
+            }
+            payloadArea.setText(sb.toString());
+            payloadArea.setCaretPosition(0);
+        };
+        chainCombo.addActionListener(e -> update.accept(chainCombo.getSelectedIndex()));
+        update.accept(0);
+        dialog.pack();
+        dialog.setSize(Math.min(700, dialog.getWidth()), Math.min(520, dialog.getHeight()));
+        dialog.setLocationRelativeTo(null);
+        dialog.setVisible(true);
     }
 
     private static String str(JsonElement el) {
@@ -2185,6 +2292,7 @@ public class UnveilTab {
     /** Paints attack graph chains as Role → Surface → Targets (with matched paths). Upgraded card-style rows. */
     private static final class AttackGraphPaintPanel extends JPanel {
         private static final int ROW_HEIGHT = 92;
+        private static final int ROLE_BOX_W = 200;
         private static final int BOX_W = 144;
         private static final int BOX_H = 30;
         private static final int PAD = 16;
@@ -2214,7 +2322,7 @@ public class UnveilTab {
         @Override
         public Dimension getPreferredSize() {
             int rows = model.getRowCount();
-            int w = PAD * 2 + BOX_W * 3 + ARROW_LEN * 2 + 220;
+            int w = PAD * 2 + ROLE_BOX_W + BOX_W + ARROW_LEN + 240;
             int h = rows == 0 ? ROW_HEIGHT : PAD * 2 + rows * (ROW_HEIGHT + ROW_PAD);
             return new Dimension(w, h);
         }
@@ -2232,27 +2340,23 @@ public class UnveilTab {
             }
             int y = PAD;
             for (int r = 0; r < rows; r++) {
-                String role = objStr(model.getValueAt(r, 0));
-                String surface = objStr(model.getValueAt(r, 1));
-                String targets = objStr(model.getValueAt(r, 2));
-                String reason = objStr(model.getValueAt(r, 3));
-                String paths = objStr(model.getValueAt(r, 4));
+                String component = objStr(model.getValueAt(r, 0));
+                String targets = objStr(model.getValueAt(r, 1));
+                String reason = objStr(model.getValueAt(r, 2));
+                String paths = objStr(model.getValueAt(r, 3));
 
                 // Card background for this row
-                int cardW = PAD * 2 + BOX_W * 3 + ARROW_LEN * 2 + 200;
+                int cardW = PAD * 2 + ROLE_BOX_W + BOX_W + ARROW_LEN + 220;
                 g2.setColor(cardBg);
                 g2.fillRoundRect(PAD - 4, y - 4, cardW, ROW_HEIGHT + 4, CARD_ARC, CARD_ARC);
                 g2.setColor(darkTheme ? new Color(70, 70, 74) : new Color(220, 220, 224));
                 g2.drawRoundRect(PAD - 4, y - 4, cardW, ROW_HEIGHT + 4, CARD_ARC, CARD_ARC);
 
                 int x = PAD;
-                drawBox(g2, x, y, BOX_W, BOX_H, role, true, darkTheme);
-                x += BOX_W + ARROW_LEN;
+                drawBox(g2, x, y, ROLE_BOX_W, BOX_H, component, true, darkTheme);
+                x += ROLE_BOX_W + ARROW_LEN;
                 drawArrow(g2, x - ARROW_LEN, y + BOX_H / 2, x, y + BOX_H / 2, darkTheme);
-                drawBox(g2, x, y, BOX_W, BOX_H, surface, true, darkTheme);
-                x += BOX_W + ARROW_LEN;
-                drawArrow(g2, x - ARROW_LEN, y + BOX_H / 2, x, y + BOX_H / 2, darkTheme);
-                drawBox(g2, x, y, BOX_W + 200, BOX_H, truncate(targets, 38), false, darkTheme);
+                drawBox(g2, x, y, BOX_W + 220, BOX_H, truncate(targets, 48), false, darkTheme);
 
                 if (reason != null && !reason.isEmpty()) {
                     g2.setFont(g2.getFont().deriveFont(10f));
