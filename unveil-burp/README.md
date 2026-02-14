@@ -1,8 +1,8 @@
 # Unveil — Burp Suite extension
 
-Adds an **Unveil** tab to Burp Suite: scan apps/binaries for attack surfaces, set CLI options or use the **daemon**, and view rich results (Summary, Attack graph, Discovered HTML with in-panel viewer, Electron info, Chainability, Extracted refs, Possible CVEs, Discovered assets, Raw JSON) with Copy / Save / Export HTML / **Export SARIF**.
+Adds an **Unveil** tab to Burp Suite: scan apps/binaries for attack surfaces, set CLI options or use the **daemon**, and view rich results (Summary with framework/asset breakdown, Attack graph, Discovered HTML with in-panel viewer, Chainability, Extracted refs, Possible CVEs, Discovered assets, Raw JSON) with Copy / Save / Export HTML / **Export SARIF**.
 
-## What’s in the tab (v0.4.0)
+## What’s in the tab (v0.4.1)
 
 - **Path** — Target to scan: directory, `.app`, `.exe`, `.dmg`, `.ipa`, `.apk`, `.jar`/`.war`, or file. **Browse…** to pick.
 - **Scan** — Runs the Unveil CLI (or **daemon** if enabled) with the path and options; results appear below.
@@ -11,7 +11,7 @@ Adds an **Unveil** tab to Burp Suite: scan apps/binaries for attack surfaces, se
 - **Limits** — **Max files**, **Max size (MB)**, **Max per type** (CLI `--max-files`, `--max-size-mb`, `--max-per-type`). Used for both CLI and daemon.
 - **Baseline (optional)** — Path to a baseline report JSON; passed as `--baseline` for diff (added/removed findings, verdict changed). Summary shows diff when present.
 - **Unveil executable (optional)** — Override path to the `unveil` binary when not using daemon. **Unveil CLI:** label shows detected version.
-- **Results tabs** — **Summary**, **Discovered HTML** (list + **View in panel** to render HTML inside Burp), **Discovered assets**, **Electron info**, **Chainability**, **Extracted refs**, **Possible CVEs**, **Checklist**, **Attack graph** (visual graph: role → surface → targets with matched paths; sendable URLs with **Send selected to Repeater**), **Raw JSON**.
+- **Results tabs** — **Summary** (what it's made of + verdict; framework info e.g. Electron when detected is inline), **Discovered HTML** (list + **View in panel**), **Discovered assets**, **Chainability**, **Extracted refs**, **Possible CVEs**, **Checklist**, **Attack graph** (visual graph with black blocks; sendable URLs with **Send selected to Repeater**), **Raw JSON**.
 - **Copy JSON** / **Save JSON…** / **Save compact JSON…** / **Export HTML…** / **Export SARIF…** — Export SARIF runs `unveil -q -xs <file>` for CI/IDE.
 - **Persistent settings** — Unveil path, daemon URL, option checkboxes, limits, and baseline path are saved and restored across Burp restarts (Java Preferences).
 - **Rescan last** — Re-run the last target (CLI or daemon).
@@ -43,13 +43,13 @@ cd unveil-burp
 ./gradlew jar
 ```
 
-The JAR is written to `build/libs/unveil-burp-0.4.0.jar`.
+The JAR is written to `build/libs/unveil-burp-0.4.1.jar`.
 
 ## Load in Burp
 
 1. Open Burp Suite (2023.8+ for Montoya API).
 2. **Extensions** → **Installed** → **Add** → **Extension type: Java**.
-3. Select `build/libs/unveil-burp-0.4.0.jar`.
+3. Select `build/libs/unveil-burp-0.4.1.jar`.
 4. The **Unveil** tab appears; if scan fails with “unveil not found”, set **Unveil executable (optional)** to the path from `which unveil`.
 
 ## Compressing the JSON output
@@ -59,13 +59,13 @@ The JAR is written to `build/libs/unveil-burp-0.4.0.jar`.
 - **Discovered HTML** — **View in panel** renders the selected HTML file inside Burp (avoids blank browser with file://); **Open in browser** still available.
 - **Raw JSON** remains available for tooling or archival; **Copy JSON** / **Save JSON…** / **Save compact JSON…** for sharing or CI.
 
-## Implemented (v0.4.0)
+## Implemented (v0.4.1)
 
 - **Persistent settings** — Java Preferences: unveil path, daemon URL, use daemon, option checkboxes, limits, baseline path (saved on successful scan).
 - **Daemon mode** — **Use daemon** + URL; `POST /scan` with JSON body (target, extended, offensive, max_files, max_size_mb, max_per_type). No CLI spawn.
-- **New report tabs** — **Electron info** (version, nodeIntegration, contextIsolation, sandbox), **Chainability** (file → ref → in scope / matched type), **Extracted refs** (file → refs), **Possible CVEs** (hunt_queries / possible_cves; Copy all), **Checklist** (potential secrets/static-analysis no-nos: file, pattern, snippet, line).
+- **New report tabs** — **Chainability** (file → ref → in scope / matched type), **Extracted refs** (file → refs), **Possible CVEs** (hunt_queries / possible_cves; Copy all), **Checklist** (potential secrets/static-analysis no-nos: file, pattern, snippet, line).
 - **Target / Site Map** — After each scan, results are added as Burp audit issues (one summary issue + up to 30 checklist findings) so they appear in Target and Dashboard.
-- **Summary** — Now includes electron info present, chainability count (refs / in scope), possible CVE count, and **baseline diff** (added/removed findings, verdict changed) when `--baseline` was used.
+- **Summary** — General "what it's made of" (assets + frameworks when detected), chainability count (refs / in scope), possible CVE count, and **baseline diff** (added/removed findings, verdict changed) when `--baseline` was used.
 - **Export SARIF…** — Runs `unveil -q -xs <file>` for CI (e.g. GitHub Code Scanning).
 - **Limits & baseline** — UI for `--max-files`, `--max-size-mb`, `--max-per-type`, `--baseline`; **env** in Discovered assets type filter.
 - **Version label** — Parses “Unveil RADAR vX.Y.Z” from CLI output (handles multi-line banner).

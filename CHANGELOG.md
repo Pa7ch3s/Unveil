@@ -4,6 +4,14 @@
 
 - (None.)
 
+## [0.8.1] — 2026-02-13
+
+- Version bump. Burp extension 0.4.1: rebuild JAR and **reload the extension** in Burp to see current UI (no Hunt plan tab; Attack graph is visual; Discovered HTML has View in panel). **Unveil CLI:** label in the tab shows the CLI version from `unveil --version`.
+
+## [0.4.1] — unveil-burp — 2026-02-13
+
+- Version bump. Rebuild with `./gradlew jar` and reload the extension in Burp to get the updated UI (Hunt plan tab removed; Attack graph visualization; View in panel for HTML).
+
 ## [0.8.0] — 2026-02-13
 
 - **Attack graph** — Report includes `attack_graph` (chains + sendable_urls; chains include matched_paths from scan). Burp: Attack graph tab is a **visual graph** (role → surface → targets); **Send selected to Repeater** for one-click Repeater tabs per URL. Hunt plan tab removed (redundant with attack graph).
