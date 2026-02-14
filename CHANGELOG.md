@@ -4,6 +4,18 @@
 
 - (None.)
 
+## [0.9.0] — 2026-02-13
+
+- **P0–P2 Senior Tester Audit** — Interesting strings in report (URLs, IPs, paths, secret-like); ACL/permission audit (Windows icacls, macOS/Linux stat); .NET assembly name/version + dangerous API hints (dnfile/monodis/PowerShell); cert parsing (openssl, validity, self-signed, expired); CVE lookup (NVD API 2.0, optional `--cve-lookup` / NVD_API_KEY); bulk Import from Proxy for Live manipulation; instrumentation hints per surface; custom checklist patterns (UNVEIL_CHECKLIST_EXTRA) + severity (credential/dangerous_config/informational); paths to watch for process monitor correlation (ProcMon/fs_usage). Remaining work documented in `docs/REMAINING_ISSUES.md`.
+- **CLI** — Version 0.9.0. New flags: `--cve-lookup`. Daemon: `cve_lookup` in scan request.
+- **Report** — New keys: `interesting_strings`, `permission_findings`, `cert_findings`, `dotnet_findings`, `cve_lookup`, `instrumentation_hints`, `paths_to_watch`, `paths_to_watch_note`. Checklist findings include `severity`.
+
+## [0.6.0] — unveil-burp — 2026-02-13
+
+- **New tabs** — Interesting strings, Permission findings, Cert findings, Dotnet findings, CVE lookup, Instrumentation hints, Paths to watch. Checklist: Severity column. Summary: lines for all new sections.
+- **Options** — CVE lookup (NVD) checkbox; persisted. **Bulk import from Proxy** — Import last N requests (optional host filter) into Live slots.
+- **Build** — Version 0.6.0. Bulk import fix (proxy history type).
+
 ## [0.8.4] — 2026-02-13
 
 - **CLI** — Version 0.8.4 (pyproject.toml). Fallback version in cli.py/sarif_export.py aligned.

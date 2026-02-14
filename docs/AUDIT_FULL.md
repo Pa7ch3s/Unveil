@@ -12,11 +12,11 @@
 
 ### Version and single source of truth
 
-| Location | Current (as of 0.8.4) |
+| Location | Current (as of 0.9.0) |
 |----------|------------------------|
-| `pyproject.toml` | `0.8.4` |
-| `unveil/cli.py` | Reads via `importlib.metadata.version("unveil")`, fallback `0.8.4` |
-| `unveil/sarif_export.py` | `_UNVEIL_VERSION` from importlib.metadata, fallback `0.8.4` |
+| `pyproject.toml` | `0.9.0` |
+| `unveil/cli.py` | Reads via `importlib.metadata.version("unveil")`, fallback `0.9.0` |
+| `unveil/sarif_export.py` | `_UNVEIL_VERSION` from importlib.metadata, fallback `0.9.0` |
 | `unveil/assets/banner.txt` | No version line (version printed by CLI) |
 
 ### Documentation alignment
@@ -41,13 +41,13 @@
 
 ### Version
 
-- **build.gradle.kts** — `version = "0.5.3"`.
-- **README** — "v0.5.3" throughout; JAR name `unveil-burp-0.5.3.jar`.
+- **build.gradle.kts** — `version = "0.6.0"`.
+- **README** — "v0.6.0" throughout; JAR name `unveil-burp-0.6.0.jar`.
 
 ### Documentation alignment
 
 - **Results tabs** — README lists Summary (with CVE hunt queries), Chainability, Checklist, Attack graph, etc. **Possible CVEs** tab removed (CVE queries in Summary).
-- **Implemented (v0.5.3)** — CVE in Summary; Chainability filters/context menu; Checklist; Target/Site Map; UI dedupe.
+- **Implemented (v0.6.0)** — CVE in Summary; Chainability; Checklist; Target/Site Map; UI dedupe; P0–P2 tabs (strings, permissions, certs, dotnet, CVE lookup, instrumentation, paths to watch); bulk Import from Proxy.
 - **Forward-thinking** — "Burp Scanner issues" removed (implemented as Target/Site Map); list renumbered. Roadmap updated: "Scanner issues / Target already implemented." ✅
 
 ### Consistency with CLI
@@ -60,7 +60,7 @@
 
 ### Repository (github.com/Pa7ch3s/Unveil)
 
-- README, supported formats, features, install, usage, and flag table match local README (v0.8.4, SARIF, baseline, CVE).
+- README, supported formats, features, install, usage, and flag table match local README (v0.9.0, SARIF, baseline, CVE).
 - No separate "GitHub Pages" site was reachable at `https://pa7ch3s.github.io/Unveil/` at audit time. Primary documentation is the repo (README, `docs/`, `unveil-burp/README.md`).
 
 ### Recommendation
@@ -74,12 +74,12 @@
 | Area | Change |
 |------|--------|
 | **docs/AUDIT.md** | Version finding → Fixed; Double walk / Hardcoded limits → Fixed. |
-| **README.md** | v0.8.4 features; CVE in Summary, Chainability. |
-| **CHANGELOG.md** | [0.8.4]/[0.5.3] CVE in Summary, Chainability; historical [0.7.0]/[0.3.0] preserved. |
+| **README.md** | v0.9.0 features; P0–P2 audit, CVE in Summary, Chainability. |
+| **CHANGELOG.md** | [0.9.0]/[0.6.0] P0–P2; historical [0.8.4]/[0.5.3] preserved. |
 | **unveil-burp/README.md** | Checklist in tabs; Implemented: Checklist, Target, UI dedupe; Forward-thinking/Roadmap updated. |
 | **docs/USAGE.md** | §18 SARIF (-xs), §19 baseline; full flag table including -xs, -V, --max-*, --baseline, --cve; target .jar/.war. |
 | **unveil/renderer.py** | Checklist section in HTML report; `env` in discovered-assets types. |
-| **unveil/sarif_export.py** | Tool version from importlib.metadata (fallback 0.8.4). |
+| **unveil/sarif_export.py** | Tool version from importlib.metadata (fallback 0.9.0). |
 
 ---
 
@@ -87,8 +87,8 @@
 
 | Component | Version |
 |-----------|---------|
-| CLI (pyproject.toml, unveil) | 0.8.4 |
-| Burp extension (build.gradle.kts, JAR) | 0.5.3 |
+| CLI (pyproject.toml, unveil) | 0.9.0 |
+| Burp extension (build.gradle.kts, JAR) | 0.6.0 |
 | SARIF / CLI banner | Dynamic from package metadata |
 
 All references to 0.6.0 removed; AUDIT and CHANGELOG reflect current behavior and fixes.
