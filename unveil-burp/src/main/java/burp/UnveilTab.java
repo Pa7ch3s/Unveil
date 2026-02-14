@@ -77,10 +77,9 @@ public class UnveilTab {
     private final JTable extractedRefsTable;
     private final DefaultListModel<String> possibleCvesModel = new DefaultListModel<>();
     private final JList<String> possibleCvesList;
-    private final DefaultTableModel electronInfoModel;
-    private final JTable electronInfoTable;
     private final DefaultTableModel checklistModel;
     private final JTable checklistTable;
+    private final JTextField checklistFilterField;
     private final DefaultTableModel attackGraphChainsModel;
     private final DefaultTableModel sendableUrlsModel;
     private final JTable sendableUrlsTable;
@@ -193,7 +192,8 @@ public class UnveilTab {
         unveilBrowseButton.setToolTipText("Select the unveil executable (e.g. from pipx or venv)");
         unveilBrowseButton.addActionListener(this::onBrowseUnveilExe);
         unveilPathPanel.add(unveilBrowseButton);
-        this.versionLabel = new JLabel("Unveil CLI: —");
+        String extVer = extensionVersion();
+        this.versionLabel = new JLabel("Extension " + extVer + " · CLI: —");
         versionLabel.setForeground(new Color(100, 100, 100));
         versionLabel.setFont(versionLabel.getFont().deriveFont(Font.ITALIC, versionLabel.getFont().getSize2D() - 1));
         unveilPathPanel.add(versionLabel);
@@ -326,14 +326,6 @@ public class UnveilTab {
         discoveredAssetsTable.setComponentPopupMenu(discoveredAssetsMenu);
         resultsTabs.addTab("Discovered assets", discoveredAssetsPanel);
 
-        // Electron info
-        this.electronInfoModel = new DefaultTableModel(new String[] { "Key", "Value" }, 0);
-        this.electronInfoTable = new JTable(electronInfoModel);
-        electronInfoTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        JPanel electronInfoPanel = new JPanel(new BorderLayout());
-        electronInfoPanel.add(new JScrollPane(electronInfoTable), BorderLayout.CENTER);
-        resultsTabs.addTab("Electron info", electronInfoPanel);
-
         // Chainability
         this.chainabilityModel = new DefaultTableModel(new String[] { "File", "Ref", "In scope", "Matched type" }, 0);
         this.chainabilityTable = new JTable(chainabilityModel);
@@ -346,7 +338,24 @@ public class UnveilTab {
         this.extractedRefsTable = new JTable(extractedRefsModel);
         extractedRefsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         extractedRefsTable.setAutoCreateRowSorter(true);
+        extractedRefsTable.setRowHeight(Math.max(extractedRefsTable.getRowHeight(), 48));
+        extractedRefsTable.getColumnModel().getColumn(0).setCellRenderer(new javax.swing.table.DefaultTableCellRenderer() {
+            @Override
+            public java.awt.Component getTableCellRendererComponent(JTable t, Object value, boolean sel, boolean focus, int row, int col) {
+                java.awt.Component c = super.getTableCellRendererComponent(t, value, sel, focus, row, col);
+                setToolTipText(value != null ? value.toString() : null);
+                return c;
+            }
+        });
+        extractedRefsTable.getColumnModel().getColumn(1).setCellRenderer(new javax.swing.table.DefaultTableCellRenderer() {
+            { setVerticalAlignment(SwingConstants.TOP); }
+        });
+        extractedRefsTable.getColumnModel().getColumn(0).setPreferredWidth(320);
+        extractedRefsTable.getColumnModel().getColumn(1).setPreferredWidth(500);
         JPanel extractedRefsPanel = new JPanel(new BorderLayout());
+        JLabel extractedRefsHint = new JLabel("File paths (hover for full path). Refs listed one per line.");
+        extractedRefsHint.setBorder(new EmptyBorder(4, 4, 4, 4));
+        extractedRefsPanel.add(extractedRefsHint, BorderLayout.NORTH);
         extractedRefsPanel.add(new JScrollPane(extractedRefsTable), BorderLayout.CENTER);
         resultsTabs.addTab("Extracted refs", extractedRefsPanel);
 
@@ -355,7 +364,9 @@ public class UnveilTab {
         possibleCvesList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         JPanel possibleCvesPanel = new JPanel(new BorderLayout(4, 4));
         JPanel possibleCvesToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        possibleCvesToolbar.add(new JLabel("Hunt queries / possible CVE search terms (from verdict or --cve):"));
+        JLabel possibleCvesLabel = new JLabel("Hunt queries / CVE search terms (paste into NVD/CVE database for CVE IDs):");
+        possibleCvesLabel.setToolTipText("These are search terms, not CVE numbers. Use at nvd.nist.gov or similar to find CVEs.");
+        possibleCvesToolbar.add(possibleCvesLabel);
         JButton copyCvesBtn = new JButton("Copy all");
         copyCvesBtn.addActionListener(e -> copyPossibleCves());
         possibleCvesToolbar.add(copyCvesBtn);
@@ -368,7 +379,20 @@ public class UnveilTab {
         this.checklistTable = new JTable(checklistModel);
         checklistTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         checklistTable.setAutoCreateRowSorter(true);
-        resultsTabs.addTab("Checklist", new JScrollPane(checklistTable));
+        this.checklistFilterField = new JTextField(18);
+        checklistFilterField.setToolTipText("Filter by File, Pattern, or Snippet");
+        checklistFilterField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { applyChecklistFilter(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { applyChecklistFilter(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { applyChecklistFilter(); }
+        });
+        JPanel checklistPanel = new JPanel(new BorderLayout(4, 4));
+        JPanel checklistToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        checklistToolbar.add(new JLabel("Filter:"));
+        checklistToolbar.add(checklistFilterField);
+        checklistPanel.add(checklistToolbar, BorderLayout.NORTH);
+        checklistPanel.add(new JScrollPane(checklistTable), BorderLayout.CENTER);
+        resultsTabs.addTab("Checklist", checklistPanel);
 
         // Attack graph: visual chains + sendable URLs (one-click Send to Repeater)
         this.attackGraphChainsModel = new DefaultTableModel(
@@ -399,7 +423,15 @@ public class UnveilTab {
         rawJsonArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         rawJsonArea.setLineWrap(false);
         rawJsonArea.setText(EMPTY_MESSAGE);
-        resultsTabs.addTab("Raw JSON", new JScrollPane(rawJsonArea));
+        JComponent rawJsonLineNumbers = new LineNumberView(rawJsonArea);
+        JScrollPane rawJsonScroll = new JScrollPane(rawJsonArea);
+        rawJsonScroll.setRowHeaderView(rawJsonLineNumbers);
+        rawJsonArea.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { rawJsonLineNumbers.revalidate(); rawJsonLineNumbers.repaint(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { rawJsonLineNumbers.revalidate(); rawJsonLineNumbers.repaint(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { rawJsonLineNumbers.revalidate(); rawJsonLineNumbers.repaint(); }
+        });
+        resultsTabs.addTab("Raw JSON", rawJsonScroll);
 
         JPanel top = new JPanel(new BorderLayout(0, 10));
         top.add(intro, BorderLayout.NORTH);
@@ -490,10 +522,16 @@ public class UnveilTab {
                     version = lines[lines.length - 1].trim();
             }
             String finalVersion = version;
-            SwingUtilities.invokeLater(() -> versionLabel.setText("Unveil CLI: " + finalVersion));
+            String extVer = extensionVersion();
+            SwingUtilities.invokeLater(() -> versionLabel.setText("Extension " + extVer + " · CLI: " + finalVersion));
         } catch (Exception e) {
-            SwingUtilities.invokeLater(() -> versionLabel.setText("Unveil CLI: not found"));
+            SwingUtilities.invokeLater(() -> versionLabel.setText("Extension " + extensionVersion() + " · CLI: not found"));
         }
+    }
+
+    private static String extensionVersion() {
+        String v = UnveilTab.class.getPackage().getImplementationVersion();
+        return v != null ? v : "?";
     }
 
     public JComponent getTabComponent() {
@@ -812,6 +850,36 @@ public class UnveilTab {
                 ? metadata.get("target").getAsString() : "—";
             summary.append("Target: ").append(target).append("\n\n");
 
+            // What it's made of (general: assets first, then detected frameworks)
+            summary.append("What it's made of\n");
+            if (report.has("discovered_assets")) {
+                JsonObject da = report.getAsJsonObject("discovered_assets");
+                if (da != null && da.size() > 0) {
+                    List<String> counts = new ArrayList<>();
+                    for (String type : new String[] { "script", "html", "plist", "config", "json", "manifest", "xml", "policy", "cert", "data", "env" }) {
+                        if (da.has(type)) {
+                            JsonArray arr = da.getAsJsonArray(type);
+                            int n = arr != null ? arr.size() : 0;
+                            if (n > 0) counts.add(n + " " + type);
+                        }
+                    }
+                    if (!counts.isEmpty()) summary.append("  Assets: ").append(String.join(", ", counts)).append("\n");
+                }
+            }
+            if (report.has("electron_info")) {
+                JsonObject ei = report.getAsJsonObject("electron_info");
+                if (ei != null && ei.size() > 0) {
+                    String ev = ei.has("electron_version") ? str(ei.get("electron_version")) : null;
+                    summary.append("  Frameworks: Electron").append(ev != null && !ev.isEmpty() ? " " + ev : "").append("\n");
+                    for (String key : ei.keySet()) {
+                        if ("electron_version".equals(key)) continue;
+                        JsonElement v = ei.get(key);
+                        summary.append("    ").append(key).append(": ").append(v.isJsonPrimitive() ? v.getAsString() : v.toString()).append("\n");
+                    }
+                } else summary.append("  Frameworks: none detected\n");
+            } else summary.append("  Frameworks: none detected\n");
+            summary.append("\n");
+
             if (verdict != null) {
                 summary.append("Verdict\n");
                 summary.append("  Exploitability band: ").append(str(verdict.get("exploitability_band"))).append("\n");
@@ -830,7 +898,7 @@ public class UnveilTab {
                 if (verdict.has("families")) {
                     JsonArray arr = verdict.getAsJsonArray("families");
                     if (arr != null && arr.size() > 0) {
-                        summary.append("  Families: ");
+                        summary.append("  Attack families (taxonomy): ");
                         List<String> list = new ArrayList<>();
                         for (JsonElement el : arr) list.add(el.getAsString());
                         summary.append(String.join(", ", list)).append("\n");
@@ -842,12 +910,6 @@ public class UnveilTab {
                         JsonArray chains = ag.getAsJsonArray("chains");
                         summary.append("\nAttack graph chains: ").append(chains != null ? chains.size() : 0).append("\n");
                     }
-                }
-            }
-            if (report.has("electron_info")) {
-                JsonObject ei = report.getAsJsonObject("electron_info");
-                if (ei != null && ei.size() > 0) {
-                    summary.append("\nElectron info: present (see tab)\n");
                 }
             }
             if (report.has("chainability")) {
@@ -917,16 +979,6 @@ public class UnveilTab {
             }
             applyDiscoveredAssetsTypeFilter();
 
-            electronInfoModel.setRowCount(0);
-            if (report.has("electron_info")) {
-                JsonObject ei = report.getAsJsonObject("electron_info");
-                if (ei != null) {
-                    for (String key : ei.keySet()) {
-                        JsonElement v = ei.get(key);
-                        electronInfoModel.addRow(new Object[] { key, v.isJsonPrimitive() ? v.getAsString() : v.toString() });
-                    }
-                }
-            }
             chainabilityModel.setRowCount(0);
             if (report.has("chainability")) {
                 JsonArray ca = report.getAsJsonArray("chainability");
@@ -954,7 +1006,7 @@ public class UnveilTab {
                         StringBuilder refsStr = new StringBuilder();
                         if (refs != null) {
                             for (int i = 0; i < refs.size(); i++) {
-                                if (i > 0) refsStr.append(", ");
+                                if (i > 0) refsStr.append("\n");
                                 refsStr.append(refs.get(i).getAsString());
                             }
                         }
@@ -999,6 +1051,8 @@ public class UnveilTab {
                     }
                 }
             }
+            checklistFilterField.setText("");
+            applyChecklistFilter();
             attackGraphChainsModel.setRowCount(0);
             sendableUrlsModel.setRowCount(0);
             if (report.has("attack_graph")) {
@@ -1217,10 +1271,13 @@ public class UnveilTab {
             JEditorPane editor = new JEditorPane();
             editor.setContentType("text/html");
             editor.setEditorKit(new HTMLEditorKit());
+            editor.setBackground(Color.WHITE);
+            editor.setForeground(Color.BLACK);
             editor.setText(html);
             editor.setEditable(false);
             editor.setCaretPosition(0);
             JScrollPane scroll = new JScrollPane(editor);
+            scroll.getViewport().setBackground(Color.WHITE);
             scroll.setPreferredSize(new Dimension(800, 600));
             JDialog dialog = new JDialog((Frame) null, "HTML: " + f.getName(), false);
             dialog.getContentPane().add(scroll, BorderLayout.CENTER);
@@ -1289,6 +1346,20 @@ public class UnveilTab {
             sorter.setRowFilter(null);
         } else {
             sorter.setRowFilter(RowFilter.regexFilter("^" + java.util.regex.Pattern.quote(type) + "$", 1));
+        }
+    }
+
+    private void applyChecklistFilter() {
+        TableRowSorter<?> sorter = (TableRowSorter<?>) checklistTable.getRowSorter();
+        if (sorter == null) return;
+        String q = checklistFilterField.getText();
+        if (q == null) q = "";
+        q = q.trim();
+        if (q.isEmpty()) {
+            sorter.setRowFilter(null);
+        } else {
+            String search = "(?i)" + java.util.regex.Pattern.quote(q);
+            sorter.setRowFilter(RowFilter.regexFilter(search, 0, 1, 2));
         }
     }
 
@@ -1523,6 +1594,44 @@ public class UnveilTab {
         });
     }
 
+    /** Line numbers for Raw JSON text area. */
+    private static final class LineNumberView extends JComponent {
+        private final JTextArea textArea;
+        private static final int MARGIN = 4;
+
+        LineNumberView(JTextArea textArea) {
+            this.textArea = textArea;
+            setFont(textArea.getFont());
+            setBackground(UIManager.getColor("Panel.background"));
+            if (getBackground() == null) setBackground(new Color(240, 240, 240));
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            int lineCount = Math.max(1, textArea.getLineCount());
+            FontMetrics fm = getFontMetrics(getFont());
+            int lineHeight = fm.getHeight();
+            int width = fm.stringWidth(String.valueOf(lineCount)) + MARGIN * 2;
+            int height = lineCount * lineHeight;
+            return new Dimension(width, height);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            FontMetrics fm = g.getFontMetrics();
+            int lineHeight = fm.getHeight();
+            int ascent = fm.getAscent();
+            int lineCount = Math.max(1, textArea.getLineCount());
+            int width = getWidth();
+            g.setColor(getForeground() != null ? getForeground() : Color.GRAY);
+            for (int i = 1; i <= lineCount; i++) {
+                String num = String.valueOf(i);
+                g.drawString(num, width - MARGIN - fm.stringWidth(num), (i - 1) * lineHeight + ascent);
+            }
+        }
+    }
+
     /** Paints attack graph chains as Role → Surface → Targets (with matched paths). */
     private static final class AttackGraphPaintPanel extends JPanel {
         private static final int ROW_HEIGHT = 88;
@@ -1532,10 +1641,20 @@ public class UnveilTab {
         private static final int ARROW_LEN = 24;
 
         private final DefaultTableModel model;
+        private final boolean darkTheme;
 
         AttackGraphPaintPanel(DefaultTableModel model) {
             this.model = model;
-            setBackground(UIManager.getColor("Panel.background"));
+            Color bg = UIManager.getColor("Panel.background");
+            if (bg == null) bg = new Color(240, 240, 240);
+            setBackground(bg);
+            this.darkTheme = isDark(bg);
+        }
+
+        private static boolean isDark(Color c) {
+            if (c == null) return false;
+            double brightness = (c.getRed() * 0.299 + c.getGreen() * 0.587 + c.getBlue() * 0.114) / 255;
+            return brightness < 0.45;
         }
 
         @Override
@@ -1553,7 +1672,7 @@ public class UnveilTab {
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             int rows = model.getRowCount();
             if (rows == 0) {
-                g2.setColor(getForeground());
+                g2.setColor(foregroundColor());
                 g2.drawString("No chains. Run a scan to see the attack graph.", PAD, PAD + 20);
                 return;
             }
@@ -1566,54 +1685,70 @@ public class UnveilTab {
                 String paths = objStr(model.getValueAt(r, 4));
 
                 int x = PAD;
-                drawBox(g2, x, y, BOX_W, BOX_H, role, true);
+                drawBox(g2, x, y, BOX_W, BOX_H, role, true, darkTheme);
                 x += BOX_W + ARROW_LEN;
-                drawArrow(g2, x - ARROW_LEN, y + BOX_H / 2, x, y + BOX_H / 2);
-                drawBox(g2, x, y, BOX_W, BOX_H, surface, true);
+                drawArrow(g2, x - ARROW_LEN, y + BOX_H / 2, x, y + BOX_H / 2, darkTheme);
+                drawBox(g2, x, y, BOX_W, BOX_H, surface, true, darkTheme);
                 x += BOX_W + ARROW_LEN;
-                drawArrow(g2, x - ARROW_LEN, y + BOX_H / 2, x, y + BOX_H / 2);
-                drawBox(g2, x, y, BOX_W + 180, BOX_H, truncate(targets, 35), false);
+                drawArrow(g2, x - ARROW_LEN, y + BOX_H / 2, x, y + BOX_H / 2, darkTheme);
+                drawBox(g2, x, y, BOX_W + 180, BOX_H, truncate(targets, 35), false, darkTheme);
 
                 if (reason != null && !reason.isEmpty()) {
                     g2.setFont(g2.getFont().deriveFont(10f));
-                    g2.setColor(getForeground().darker());
+                    g2.setColor(secondaryColor());
                     String shortReason = truncate(reason, 60);
                     g2.drawString(shortReason, PAD, y + BOX_H + 14);
                     g2.setFont(g2.getFont().deriveFont(12f));
-                    g2.setColor(getForeground());
+                    g2.setColor(foregroundColor());
                 }
                 if (paths != null && !paths.isEmpty()) {
                     g2.setFont(g2.getFont().deriveFont(10f));
-                    g2.setColor(getForeground().darker());
+                    g2.setColor(secondaryColor());
                     String firstLine = paths.contains("\n") ? paths.substring(0, paths.indexOf('\n')) : paths;
                     g2.drawString("Paths: " + truncate(firstLine, 70), PAD, y + BOX_H + 28);
                     g2.setFont(g2.getFont().deriveFont(12f));
-                    g2.setColor(getForeground());
+                    g2.setColor(foregroundColor());
                 }
                 y += ROW_HEIGHT;
             }
         }
 
-        private static void drawBox(Graphics2D g2, int x, int y, int w, int h, String text, boolean bold) {
-            Color bg = UIManager.getColor("Panel.background");
-            g2.setColor(bg != null ? bg.darker() : new Color(220, 220, 220));
+        private Color foregroundColor() {
+            if (darkTheme) {
+                Color c = UIManager.getColor("Label.foreground");
+                if (c != null && !isDark(c)) return c;
+                return Color.WHITE;
+            }
+            Color c = UIManager.getColor("Label.foreground");
+            return c != null ? c : Color.BLACK;
+        }
+
+        private Color secondaryColor() {
+            if (darkTheme) return new Color(180, 180, 180);
+            return getForeground().darker();
+        }
+
+        private static void drawBox(Graphics2D g2, int x, int y, int w, int h, String text, boolean bold, boolean darkTheme) {
+            Color boxFill = darkTheme ? Color.BLACK : (UIManager.getColor("Panel.background") != null ? UIManager.getColor("Panel.background").darker() : new Color(220, 220, 220));
+            g2.setColor(boxFill);
             g2.fillRoundRect(x, y, w, h, 6, 6);
-            g2.setColor(getDefaultColor());
+            Color edge = darkTheme ? Color.WHITE : (UIManager.getColor("Label.foreground") != null ? UIManager.getColor("Label.foreground") : Color.BLACK);
+            g2.setColor(edge);
             g2.drawRoundRect(x, y, w, h, 6, 6);
-            g2.setColor(getDefaultColor());
             if (text != null && !text.isEmpty()) {
+                g2.setColor(edge);
                 Font f = g2.getFont();
                 if (bold) g2.setFont(f.deriveFont(Font.BOLD));
                 FontMetrics fm = g2.getFontMetrics();
                 int tw = fm.stringWidth(text);
-                if (tw > w - 6) text = truncate(text, (w - 6) / fm.charWidth('m'));
+                if (tw > w - 6) text = truncate(text, Math.max(1, (w - 6) / Math.max(1, fm.charWidth('m'))));
                 g2.drawString(text, x + (w - fm.stringWidth(text)) / 2, y + h / 2 + fm.getAscent() / 2 - 2);
                 g2.setFont(f);
             }
         }
 
-        private static void drawArrow(Graphics2D g2, int x1, int y1, int x2, int y2) {
-            g2.setColor(getDefaultColor());
+        private static void drawArrow(Graphics2D g2, int x1, int y1, int x2, int y2, boolean darkTheme) {
+            g2.setColor(darkTheme ? Color.WHITE : (UIManager.getColor("Label.foreground") != null ? UIManager.getColor("Label.foreground") : Color.BLACK));
             g2.drawLine(x1, y1, x2, y2);
             int dx = x2 - x1;
             int dy = y2 - y1;
@@ -1623,11 +1758,6 @@ public class UnveilTab {
             int ay = (int) (y2 - 8 * dy / len);
             g2.drawLine(x2, y2, ax + (int)(6 * dy / len), ay - (int)(6 * dx / len));
             g2.drawLine(x2, y2, ax - (int)(6 * dy / len), ay + (int)(6 * dx / len));
-        }
-
-        private static Color getDefaultColor() {
-            Color c = UIManager.getColor("Label.foreground");
-            return c != null ? c : Color.BLACK;
         }
 
         private static String objStr(Object o) {
