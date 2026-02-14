@@ -35,12 +35,17 @@ def build_chainability(extracted_refs, discovered_assets):
                 all_basenames.add(Path(p).name.lower())
             except Exception:
                 pass
+    seen_ref_key = set()
     for item in extracted_refs or []:
         source = item.get("file") or ""
         for ref in (item.get("refs") or []):
             ref_str = (ref or "").strip()
             if not ref_str or len(ref_str) > 500:
                 continue
+            ref_key = (source, ref_str)
+            if ref_key in seen_ref_key:
+                continue
+            seen_ref_key.add(ref_key)
             norm_ref = _normalize_for_match(ref_str)
             ref_basename = Path(ref_str).name.lower() if ref_str else ""
             in_scope = norm_ref in all_paths or ref_basename in all_basenames

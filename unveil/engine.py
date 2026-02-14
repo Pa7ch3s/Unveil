@@ -67,6 +67,26 @@ def tick(msg):
     sys.stderr.flush()
 
 
+def _empty_report(target, reason="UNKNOWN"):
+    """Return a minimal report dict with all keys present. Use for early exits (DMG/IPA/APK fail)."""
+    return {
+        "metadata": {"target": target},
+        "specifications": {},
+        "results": [],
+        "verdict": {"exploitability_band": reason, "missing_roles": ["ANCHOR", "BRIDGE", "BLADE"]},
+        "findings": [],
+        "surfaces": [],
+        "synth_indicators": [],
+        "discovered_assets": {},
+        "discovered_html": [],
+        "extracted_refs": [],
+        "electron_info": {},
+        "chainability": [],
+        "checklist_findings": [],
+        "attack_graph": {"chains": [], "sendable_urls": []},
+    }
+
+
 def _build_extended_enum(discovered_assets, results):
     """Build enum dict for expand(): ATS (NSExceptionDomains from plists), helpers (Electron helper/crashpad paths)."""
     enum = {"helpers": [], "ATS": {"NSExceptionDomains": {}}}
@@ -323,17 +343,24 @@ def _empty_discovered_assets():
 
 
 def collect_discovered_html(root, out_list, max_items=DISCOVERED_HTML_MAX):
-    """Collect .html/.htm paths under root for report (openable in browser for attacks/redev/transparency)."""
+    """Collect .html/.htm paths under root. Dedupes by resolved path. Used when not using asset_discovery (e.g. one-off)."""
     root = Path(root)
     if not root.is_dir():
         return
+    seen = set()
     for item in root.rglob("*"):
         if len(out_list) >= max_items:
             return
         if not item.is_file():
             continue
         if item.suffix.lower() in (".html", ".htm"):
-            out_list.append(str(item.resolve()))
+            try:
+                resolved = str(item.resolve())
+                if resolved not in seen:
+                    seen.add(resolved)
+                    out_list.append(resolved)
+            except (OSError, RuntimeError):
+                pass
 
 
 def _add_to_discovered_assets(item, discovered_assets):
@@ -559,19 +586,7 @@ def run(
             err = (r.stderr or r.stdout or "").strip() or "unknown"
             _config.log("error", "DMG mount failed", target=target, stderr=err)
             tick("[DMG] mount failed")
-            return {
-                "metadata": {"target": target},
-                "results": [],
-                "verdict": {"exploitability_band": "UNKNOWN", "missing_roles": ["ANCHOR", "BRIDGE", "BLADE"]},
-                "findings": [],
-                "surfaces": [],
-                "synth_indicators": [],
-                "discovered_assets": {},
-                "discovered_html": [],
-                "extracted_refs": [],
-                "electron_info": {},
-                "chainability": [],
-            }
+            return _empty_report(target)
         base = Path(mount_dir)
         unmount_dmg = mount_dir
 
@@ -584,19 +599,7 @@ def run(
         if root is None or not root.is_dir():
             _config.log("error", "IPA unpack failed", target=target)
             tick("[IPA] unpack failed")
-            return {
-                "metadata": {"target": target},
-                "results": [],
-                "verdict": {"exploitability_band": "UNKNOWN", "missing_roles": ["ANCHOR", "BRIDGE", "BLADE"]},
-                "findings": [],
-                "surfaces": [],
-                "synth_indicators": [],
-                "discovered_assets": {},
-                "discovered_html": [],
-                "extracted_refs": [],
-                "electron_info": {},
-                "chainability": [],
-            }
+            return _empty_report(target)
         base = root
         unpack_dir = tmp
 
@@ -607,19 +610,7 @@ def run(
         if root is None or not root.is_dir():
             _config.log("error", "APK unpack failed", target=target)
             tick("[APK] unpack failed")
-            return {
-                "metadata": {"target": target},
-                "results": [],
-                "verdict": {"exploitability_band": "UNKNOWN", "missing_roles": ["ANCHOR", "BRIDGE", "BLADE"]},
-                "findings": [],
-                "surfaces": [],
-                "synth_indicators": [],
-                "discovered_assets": {},
-                "discovered_html": [],
-                "extracted_refs": [],
-                "electron_info": {},
-                "chainability": [],
-            }
+            return _empty_report(target)
         base = root
         unpack_dir = tmp
         tick(f"[SCAN] {target}")
