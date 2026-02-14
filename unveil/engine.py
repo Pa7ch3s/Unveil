@@ -185,6 +185,20 @@ def discover_bundles(base):
     return bundles
 
 
+def _safe_zip_extract(z, dest: Path):
+    """Extract zip members into dest; skip any path that would escape dest (zip slip)."""
+    dest_resolved = dest.resolve()
+    for m in z.namelist():
+        if not m or m.startswith("/") or ".." in m:
+            continue
+        try:
+            member_dest = (dest / m).resolve()
+            member_dest.relative_to(dest_resolved)
+        except (ValueError, OSError):
+            continue
+        z.extract(m, dest)
+
+
 def _unpack_zip(path, prefix=None):
     """Unpack a .ipa or .apk (ZIP) to a temp dir. Returns (temp_dir_path, root_for_scan).
     prefix: optional subdir to use as scan root (e.g. 'Payload' for IPA).
@@ -195,7 +209,7 @@ def _unpack_zip(path, prefix=None):
     tmp = tempfile.mkdtemp(prefix="unveil_")
     try:
         with zipfile.ZipFile(path, "r") as z:
-            z.extractall(tmp)
+            _safe_zip_extract(z, Path(tmp))
     except Exception:
         shutil.rmtree(tmp, ignore_errors=True)
         return None, None
