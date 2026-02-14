@@ -1,0 +1,8 @@
+#!/bin/sh
+# Strip Co-authored-by lines from commit messages so only the repo author is shown.
+# Enable: git config core.hooksPath .githooks
+msgfile="$1"
+[ -z "$msgfile" ] || [ ! -f "$msgfile" ] && exit 0
+tmp=$(mktemp) || exit 0
+grep -v '^Co-authored-by:' "$msgfile" > "$tmp" && mv "$tmp" "$msgfile"
+rm -f "$tmp"
