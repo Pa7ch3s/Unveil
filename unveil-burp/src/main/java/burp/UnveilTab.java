@@ -54,6 +54,7 @@ public class UnveilTab {
     private final JCheckBox optOffensive;
     private final JCheckBox optForce;
     private final JCheckBox optCve;
+    private final JCheckBox optCveLookup;
     private final JCheckBox useDaemonCheck;
     private final JTextField daemonUrlField;
     private final JSpinner maxFilesSpinner;
@@ -79,6 +80,27 @@ public class UnveilTab {
     private final JTextField chainabilityFilterField;
     private final JComboBox<String> chainabilityScopeFilter;
     private final JLabel chainabilitySummaryLabel;
+    private final DefaultTableModel interestingStringsModel;
+    private final JTable interestingStringsTable;
+    private final JScrollPane interestingStringsScroll;
+    private final DefaultTableModel permissionFindingsModel;
+    private final JTable permissionFindingsTable;
+    private final JScrollPane permissionFindingsScroll;
+    private final DefaultTableModel certFindingsModel;
+    private final JTable certFindingsTable;
+    private final JScrollPane certFindingsScroll;
+    private final DefaultTableModel dotnetFindingsModel;
+    private final JTable dotnetFindingsTable;
+    private final JScrollPane dotnetFindingsScroll;
+    private final DefaultTableModel cveLookupModel;
+    private final JTable cveLookupTable;
+    private final JScrollPane cveLookupScroll;
+    private final DefaultTableModel instrumentationHintsModel;
+    private final JTable instrumentationHintsTable;
+    private final JScrollPane instrumentationHintsScroll;
+    private final DefaultListModel<String> pathsToWatchModel = new DefaultListModel<>();
+    private final JList<String> pathsToWatchList;
+    private final JScrollPane pathsToWatchScroll;
     private final List<UnveilTab.ExtractedRefEntry> extractedRefsData = new ArrayList<>();
     private final List<Integer> extractedRefsFilteredIndices = new ArrayList<>();
     private final DefaultListModel<String> extractedRefsFileListModel = new DefaultListModel<>();
@@ -211,6 +233,9 @@ public class UnveilTab {
         this.optCve = new JCheckBox("CVE (--cve)", false);
         optCve.setToolTipText("Add possible_cves (hunt queries) to report");
         optionsPanel.add(optCve);
+        this.optCveLookup = new JCheckBox("CVE lookup (NVD)", false);
+        optCveLookup.setToolTipText("Query NVD API for CVEs (set NVD_API_KEY for higher rate limit)");
+        optionsPanel.add(optCveLookup);
 
         // Daemon mode
         JPanel daemonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
@@ -518,6 +543,129 @@ public class UnveilTab {
         chainabilityPanel.add(chainabilityScroll, BorderLayout.CENTER);
         resultsTabs.addTab("Chainability", chainabilityPanel);
 
+        // Interesting strings (File | String)
+        this.interestingStringsModel = new DefaultTableModel(new String[] { "File", "String" }, 0);
+        this.interestingStringsTable = new JTable(interestingStringsModel);
+        interestingStringsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        interestingStringsTable.setAutoCreateRowSorter(true);
+        interestingStringsTable.setRowHeight(Math.max(20, interestingStringsTable.getRowHeight()));
+        this.interestingStringsScroll = new JScrollPane(interestingStringsTable);
+        interestingStringsScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        interestingStringsScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        JPanel interestingStringsPanel = new JPanel(new BorderLayout(4, 4));
+        interestingStringsPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
+        interestingStringsPanel.add(interestingStringsScroll, BorderLayout.CENTER);
+        resultsTabs.addTab("Interesting strings", interestingStringsPanel);
+
+        // Permission findings (Path | Finding | Detail)
+        this.permissionFindingsModel = new DefaultTableModel(new String[] { "Path", "Finding", "Detail" }, 0);
+        this.permissionFindingsTable = new JTable(permissionFindingsModel);
+        permissionFindingsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        permissionFindingsTable.setAutoCreateRowSorter(true);
+        this.permissionFindingsScroll = new JScrollPane(permissionFindingsTable);
+        permissionFindingsScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        permissionFindingsScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        JPanel permissionFindingsPanel = new JPanel(new BorderLayout(4, 4));
+        permissionFindingsPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
+        permissionFindingsPanel.add(permissionFindingsScroll, BorderLayout.CENTER);
+        resultsTabs.addTab("Permission findings", permissionFindingsPanel);
+
+        // Cert findings (Path | Subject | Expired | Self-signed)
+        this.certFindingsModel = new DefaultTableModel(new String[] { "Path", "Subject", "Expired", "Self-signed" }, 0);
+        this.certFindingsTable = new JTable(certFindingsModel);
+        certFindingsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        certFindingsTable.setAutoCreateRowSorter(true);
+        this.certFindingsScroll = new JScrollPane(certFindingsTable);
+        certFindingsScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        certFindingsScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        JPanel certFindingsPanel = new JPanel(new BorderLayout(4, 4));
+        certFindingsPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
+        certFindingsPanel.add(certFindingsScroll, BorderLayout.CENTER);
+        resultsTabs.addTab("Cert findings", certFindingsPanel);
+
+        // Dotnet findings (Path | Assembly | Version | Serialization ref | Hints)
+        this.dotnetFindingsModel = new DefaultTableModel(
+            new String[] { "Path", "Assembly", "Version", "Serialization ref", "Hints" }, 0);
+        this.dotnetFindingsTable = new JTable(dotnetFindingsModel);
+        dotnetFindingsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        dotnetFindingsTable.setAutoCreateRowSorter(true);
+        this.dotnetFindingsScroll = new JScrollPane(dotnetFindingsTable);
+        dotnetFindingsScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        dotnetFindingsScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        JPanel dotnetFindingsPanel = new JPanel(new BorderLayout(4, 4));
+        dotnetFindingsPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
+        dotnetFindingsPanel.add(dotnetFindingsScroll, BorderLayout.CENTER);
+        resultsTabs.addTab("Dotnet findings", dotnetFindingsPanel);
+
+        // CVE lookup (Query | CVE ID | Score | Published | Summary)
+        this.cveLookupModel = new DefaultTableModel(
+            new String[] { "Query", "CVE ID", "Score", "Published", "Summary" }, 0);
+        this.cveLookupTable = new JTable(cveLookupModel);
+        cveLookupTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        cveLookupTable.setAutoCreateRowSorter(true);
+        cveLookupTable.setRowHeight(Math.max(20, cveLookupTable.getRowHeight()));
+        JPopupMenu cveLookupMenu = new JPopupMenu();
+        JMenuItem openCveLinkItem = new JMenuItem("Open NVD link");
+        openCveLinkItem.addActionListener(e -> {
+            int row = cveLookupTable.getSelectedRow();
+            if (row >= 0) {
+                int modelRow = cveLookupTable.convertRowIndexToModel(row);
+                Object idObj = cveLookupModel.getValueAt(modelRow, 1);
+                if (idObj != null && !idObj.toString().isEmpty()) {
+                    String url = "https://nvd.nist.gov/vuln/detail/" + idObj.toString();
+                    try { Desktop.getDesktop().browse(new java.net.URI(url)); } catch (Exception ex) { /* ignore */ }
+                }
+            }
+        });
+        cveLookupMenu.add(openCveLinkItem);
+        cveLookupTable.setComponentPopupMenu(cveLookupMenu);
+        this.cveLookupScroll = new JScrollPane(cveLookupTable);
+        cveLookupScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        cveLookupScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        JPanel cveLookupPanel = new JPanel(new BorderLayout(4, 4));
+        cveLookupPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
+        cveLookupPanel.add(cveLookupScroll, BorderLayout.CENTER);
+        resultsTabs.addTab("CVE lookup", cveLookupPanel);
+
+        // Instrumentation hints (Surface | Component | Suggestion | Frida/script hint)
+        this.instrumentationHintsModel = new DefaultTableModel(
+            new String[] { "Surface", "Component", "Suggestion", "Frida/script hint" }, 0);
+        this.instrumentationHintsTable = new JTable(instrumentationHintsModel);
+        instrumentationHintsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        instrumentationHintsTable.setAutoCreateRowSorter(true);
+        instrumentationHintsTable.setRowHeight(Math.max(20, instrumentationHintsTable.getRowHeight()));
+        this.instrumentationHintsScroll = new JScrollPane(instrumentationHintsTable);
+        JPanel instrumentationHintsPanel = new JPanel(new BorderLayout(4, 4));
+        instrumentationHintsPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
+        instrumentationHintsPanel.add(instrumentationHintsScroll, BorderLayout.CENTER);
+        resultsTabs.addTab("Instrumentation hints", instrumentationHintsPanel);
+
+        // Paths to watch (process monitor correlation)
+        this.pathsToWatchList = new JList<>(pathsToWatchModel);
+        pathsToWatchList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        this.pathsToWatchScroll = new JScrollPane(pathsToWatchList);
+        JPanel pathsToWatchPanel = new JPanel(new BorderLayout(4, 4));
+        pathsToWatchPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
+        JPanel pathsToWatchNorth = new JPanel(new BorderLayout(4, 4));
+        JLabel pathsToWatchNote = new JLabel("Run ProcMon (Windows) or fs_usage (macOS) and filter for these paths to correlate static findings with runtime behavior.");
+        pathsToWatchNote.setForeground(Color.GRAY);
+        pathsToWatchNote.setFont(pathsToWatchNote.getFont().deriveFont(11f));
+        pathsToWatchNorth.add(pathsToWatchNote, BorderLayout.NORTH);
+        JButton pathsToWatchCopyBtn = new JButton("Copy all paths");
+        pathsToWatchCopyBtn.addActionListener(e -> {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < pathsToWatchModel.getSize(); i++) {
+                if (sb.length() > 0) sb.append("\n");
+                sb.append(pathsToWatchModel.getElementAt(i));
+            }
+            if (sb.length() > 0)
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(sb.toString()), null);
+        });
+        pathsToWatchNorth.add(pathsToWatchCopyBtn, BorderLayout.SOUTH);
+        pathsToWatchPanel.add(pathsToWatchNorth, BorderLayout.NORTH);
+        pathsToWatchPanel.add(pathsToWatchScroll, BorderLayout.CENTER);
+        resultsTabs.addTab("Paths to watch", pathsToWatchPanel);
+
         // Extracted refs — master/detail: file list (short names) | path + refs list
         this.extractedRefsPathField = new JTextField();
         extractedRefsPathField.setEditable(false);
@@ -615,7 +763,7 @@ public class UnveilTab {
         resultsTabs.addTab("Extracted refs", extractedRefsPanel);
 
         // Checklist (potential secrets / static analysis no-nos)
-        this.checklistModel = new DefaultTableModel(new String[] { "File", "Pattern", "Snippet", "Line" }, 0);
+        this.checklistModel = new DefaultTableModel(new String[] { "File", "Pattern", "Snippet", "Line", "Severity" }, 0);
         this.checklistTable = new JTable(checklistModel);
         checklistTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         checklistTable.setAutoCreateRowSorter(true);
@@ -743,6 +891,10 @@ public class UnveilTab {
         liveLoadFromProxyBtn.setToolTipText("Fill request from latest matching Proxy history entry");
         liveLoadFromProxyBtn.addActionListener(e -> loadLiveRequestFromProxy());
         liveButtons.add(liveLoadFromProxyBtn);
+        JButton liveBulkImportFromProxyBtn = new JButton("Bulk import from Proxy");
+        liveBulkImportFromProxyBtn.setToolTipText("Import last N requests from Proxy history (optionally filter by host) into Live slots");
+        liveBulkImportFromProxyBtn.addActionListener(e -> bulkImportFromProxy());
+        liveButtons.add(liveBulkImportFromProxyBtn);
         JButton liveResetSlotBtn = new JButton("Reset slot");
         liveResetSlotBtn.setToolTipText("Reset this slot to initial request; clear response");
         liveResetSlotBtn.addActionListener(e -> resetCurrentLiveSlot());
@@ -838,6 +990,7 @@ public class UnveilTab {
             optOffensive.setSelected(prefs.getBoolean("optOffensive", false));
             optForce.setSelected(prefs.getBoolean("optForce", false));
             optCve.setSelected(prefs.getBoolean("optCve", false));
+            optCveLookup.setSelected(prefs.getBoolean("optCveLookup", false));
             maxFilesSpinner.setValue(prefs.getInt("maxFiles", 80));
             maxSizeMbSpinner.setValue(prefs.getInt("maxSizeMb", 120));
             maxPerTypeSpinner.setValue(prefs.getInt("maxPerType", 500));
@@ -861,6 +1014,7 @@ public class UnveilTab {
             prefs.putBoolean("optOffensive", optOffensive.isSelected());
             prefs.putBoolean("optForce", optForce.isSelected());
             prefs.putBoolean("optCve", optCve.isSelected());
+            prefs.putBoolean("optCveLookup", optCveLookup.isSelected());
             prefs.putInt("maxFiles", ((Number) maxFilesSpinner.getValue()).intValue());
             prefs.putInt("maxSizeMb", ((Number) maxSizeMbSpinner.getValue()).intValue());
             prefs.putInt("maxPerType", ((Number) maxPerTypeSpinner.getValue()).intValue());
@@ -989,6 +1143,14 @@ public class UnveilTab {
             statusLabel.setText("Enter or choose a path first.");
             return;
         }
+        if (!useDaemonCheck.isSelected()) {
+            java.io.File pathFile = new java.io.File(target);
+            if (!pathFile.exists()) {
+                statusLabel.setText("Path does not exist.");
+                summaryArea.setText("Target path does not exist:\n\n" + target + "\n\nEnter a valid path or use Browse…");
+                return;
+            }
+        }
         statusLabel.setText("Scanning…");
         summaryArea.setText("Scanning " + target + "…\n\nPlease wait.");
         rawJsonArea.setText("");
@@ -1030,6 +1192,13 @@ public class UnveilTab {
         discoveredAssetsModel.setRowCount(0);
         applyDiscoveredAssetsTypeFilter();
         chainabilityModel.setRowCount(0);
+        interestingStringsModel.setRowCount(0);
+        permissionFindingsModel.setRowCount(0);
+        certFindingsModel.setRowCount(0);
+        dotnetFindingsModel.setRowCount(0);
+        cveLookupModel.setRowCount(0);
+        instrumentationHintsModel.setRowCount(0);
+        pathsToWatchModel.clear();
         extractedRefsData.clear();
         extractedRefsFilteredIndices.clear();
         extractedRefsFileListModel.clear();
@@ -1123,6 +1292,68 @@ public class UnveilTab {
         }
     }
 
+    private void bulkImportFromProxy() {
+        JTextField hostField = new JTextField(30);
+        hostField.setToolTipText("Leave empty to use all hosts; otherwise only requests whose URL contains this host");
+        JSpinner maxSpinner = new JSpinner(new javax.swing.SpinnerNumberModel(50, 1, 500, 10));
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        JPanel hostRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        hostRow.add(new JLabel("Host (optional):"));
+        hostRow.add(hostField);
+        panel.add(hostRow);
+        JPanel maxRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        maxRow.add(new JLabel("Max requests:"));
+        maxRow.add(maxSpinner);
+        panel.add(maxRow);
+        int ok = JOptionPane.showConfirmDialog(mainPanel, panel, "Bulk import from Proxy", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (ok != JOptionPane.OK_OPTION) return;
+        String hostFilter = (hostField.getText() != null ? hostField.getText().trim() : "").toLowerCase();
+        int maxRequests = ((Number) maxSpinner.getValue()).intValue();
+        try {
+            var history = api.proxy().history();
+            if (history == null || history.isEmpty()) {
+                statusLabel.setText("Proxy history is empty.");
+                return;
+            }
+            saveCurrentLiveSlotContent();
+            liveSlots.clear();
+            liveSlotsListModel.clear();
+            liveSlotsSelectedIndex = -1;
+            int phase = 1;
+            for (int i = history.size() - 1; i >= 0 && phase <= maxRequests; i--) {
+                var item = history.get(i);
+                if (item == null) continue;
+                String u = item.url();
+                if (u == null && item.finalRequest() != null) u = item.finalRequest().url();
+                if (u == null || !u.startsWith("http")) continue;
+                if (!hostFilter.isEmpty() && !u.toLowerCase().contains(hostFilter)) continue;
+                String reqText = item.finalRequest() != null ? item.finalRequest().toString() : "";
+                LiveManipulationSlot slot = new LiveManipulationSlot(u, "Proxy", "Import " + phase);
+                slot.requestText = reqText != null ? reqText : "";
+                slot.responseText = "";
+                liveSlots.add(slot);
+                liveSlotsListModel.addElement("Phase " + phase + ": " + (u.length() > 60 ? u.substring(0, 57) + "..." : u));
+                phase++;
+            }
+            if (liveSlots.isEmpty()) {
+                statusLabel.setText("No matching requests in Proxy history.");
+                return;
+            }
+            liveSlotsSelectedIndex = 0;
+            liveSlotsList.setSelectedIndex(0);
+            if (!liveSlots.isEmpty()) {
+                LiveManipulationSlot s = liveSlots.get(0);
+                liveRequestArea.setText(s.requestText != null ? s.requestText : "");
+                liveResponseArea.setText(s.responseText != null ? s.responseText : "");
+            }
+            statusLabel.setText("Imported " + liveSlots.size() + " requests from Proxy history.");
+        } catch (Exception ex) {
+            logging.logToError("Bulk import from Proxy: " + ex.getMessage());
+            statusLabel.setText("Bulk import failed.");
+        }
+    }
+
     private void resetCurrentLiveSlot() {
         if (liveSlotsSelectedIndex >= 0 && liveSlotsSelectedIndex < liveSlots.size()) {
             LiveManipulationSlot slot = liveSlots.get(liveSlotsSelectedIndex);
@@ -1182,6 +1413,7 @@ public class UnveilTab {
             body.addProperty("max_files", ((Number) maxFilesSpinner.getValue()).intValue());
             body.addProperty("max_size_mb", ((Number) maxSizeMbSpinner.getValue()).intValue());
             body.addProperty("max_per_type", ((Number) maxPerTypeSpinner.getValue()).intValue());
+            body.addProperty("cve_lookup", optCveLookup.isSelected());
             try (OutputStream os = conn.getOutputStream()) {
                 os.write(body.toString().getBytes(StandardCharsets.UTF_8));
             }
@@ -1212,7 +1444,8 @@ public class UnveilTab {
             SwingUtilities.invokeLater(() -> {
                 scanButton.setEnabled(true);
                 statusLabel.setText("Error.");
-                summaryArea.setText("Could not call daemon.\n\n" + (msg != null ? msg : ""));
+                summaryArea.setText("Could not call daemon.\n\n" + (msg != null ? msg : "")
+                    + "\n\nCheck that the daemon is running (e.g. run 'unveil' or 'python -m unveil.daemon') and the URL is correct.");
                 resultsToolbar.setVisible(false);
             });
         }
@@ -1249,6 +1482,7 @@ public class UnveilTab {
         if (optOffensive.isSelected()) args.add("-O");
         if (optForce.isSelected()) args.add("-f");
         if (optCve.isSelected()) args.add("--cve");
+        if (optCveLookup.isSelected()) args.add("--cve-lookup");
         Object mf = maxFilesSpinner.getValue();
         if (mf != null && ((Number) mf).intValue() != 80) {
             args.add("--max-files");
@@ -1309,13 +1543,32 @@ public class UnveilTab {
             } catch (IOException ignored) {}
 
             String finalResult = result;
+            int exitCode = exit;
             SwingUtilities.invokeLater(() -> {
                 scanButton.setEnabled(true);
-                if (exit != 0) {
-                    statusLabel.setText("Scan failed.");
-                    summaryArea.setText("Unveil exited with code " + exit + ".\n\n" +
-                        (finalResult.isEmpty() ? "Check options or unveil CLI." : finalResult));
-                    resultsToolbar.setVisible(false);
+                if (exitCode != 0) {
+                    boolean cmdNotFound = (exitCode == 127);
+                    String installHint = "Unveil CLI not found. Install: pipx install git+https://github.com/Pa7ch3s/Unveil.git\n\n"
+                        + "If already installed, set \"Unveil executable (optional)\" to the full path (e.g. from 'which unveil').";
+                    boolean appliedErrorReport = false;
+                    if (!finalResult.isEmpty() && !cmdNotFound) {
+                        try {
+                            JsonObject parsed = JsonParser.parseString(finalResult).getAsJsonObject();
+                            if (parsed.has("metadata") && parsed.getAsJsonObject("metadata").has("error")) {
+                                applyReport(finalResult);
+                                resultsToolbar.setVisible(true);
+                                statusLabel.setText("Error.");
+                                appliedErrorReport = true;
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                    if (!appliedErrorReport) {
+                        statusLabel.setText("Scan failed.");
+                        String body = cmdNotFound ? installHint : (finalResult.isEmpty() ? "Check options or unveil CLI." : finalResult);
+                        if (cmdNotFound && !finalResult.isEmpty()) body = installHint + "\n\n" + finalResult;
+                        summaryArea.setText("Unveil exited with code " + exitCode + ".\n\n" + body);
+                        resultsToolbar.setVisible(false);
+                    }
                 } else if (finalResult.isEmpty()) {
                     statusLabel.setText("Done (no output).");
                     summaryArea.setText("Scan finished but no report file was produced.");
@@ -1362,6 +1615,10 @@ public class UnveilTab {
             String target = metadata != null && metadata.has("target")
                 ? metadata.get("target").getAsString() : "—";
             summary.append("Target: ").append(target).append("\n\n");
+            if (metadata != null && metadata.has("error")) {
+                String err = metadata.get("error").getAsString();
+                summary.append("Error: ").append(err != null ? err : "").append("\n\n");
+            }
 
             // Specifications (PE/Mach-O/.app main binary — always show section so user knows it exists)
             summary.append("Specifications\n");
@@ -1466,6 +1723,64 @@ public class UnveilTab {
             if (report.has("possible_cves")) {
                 JsonArray pc = report.getAsJsonArray("possible_cves");
                 summary.append("Possible CVE queries: ").append(pc != null ? pc.size() : 0).append("\n");
+            }
+            if (report.has("interesting_strings")) {
+                JsonArray isArr = report.getAsJsonArray("interesting_strings");
+                int totalStr = 0;
+                if (isArr != null) {
+                    for (JsonElement el : isArr) {
+                        if (el.isJsonObject() && el.getAsJsonObject().has("strings")) {
+                            JsonArray s = el.getAsJsonObject().getAsJsonArray("strings");
+                            if (s != null) totalStr += s.size();
+                        }
+                    }
+                    summary.append("Interesting strings: ").append(totalStr).append(" (from ").append(isArr.size()).append(" files)\n");
+                }
+            }
+            if (report.has("permission_findings")) {
+                JsonArray pf = report.getAsJsonArray("permission_findings");
+                summary.append("Permission findings: ").append(pf != null ? pf.size() : 0).append("\n");
+            }
+            if (report.has("cert_findings")) {
+                JsonArray cf = report.getAsJsonArray("cert_findings");
+                int expired = 0, selfSigned = 0;
+                if (cf != null) {
+                    for (JsonElement el : cf) {
+                        if (el.isJsonObject()) {
+                            JsonObject o = el.getAsJsonObject();
+                            if (o.has("expired") && o.get("expired").getAsBoolean()) expired++;
+                            if (o.has("self_signed") && o.get("self_signed").getAsBoolean()) selfSigned++;
+                        }
+                    }
+                    summary.append("Cert findings: ").append(cf.size()).append(" (").append(expired).append(" expired, ").append(selfSigned).append(" self-signed)\n");
+                }
+            }
+            if (report.has("dotnet_findings")) {
+                JsonArray df = report.getAsJsonArray("dotnet_findings");
+                summary.append("Dotnet findings: ").append(df != null ? df.size() : 0).append("\n");
+            }
+            if (report.has("instrumentation_hints")) {
+                JsonArray ih = report.getAsJsonArray("instrumentation_hints");
+                summary.append("Instrumentation hints: ").append(ih != null ? ih.size() : 0).append("\n");
+            }
+            if (report.has("paths_to_watch")) {
+                JsonArray pw = report.getAsJsonArray("paths_to_watch");
+                summary.append("Paths to watch: ").append(pw != null ? pw.size() : 0).append("\n");
+            }
+            if (report.has("cve_lookup") && !report.get("cve_lookup").isJsonNull()) {
+                JsonObject cl = report.getAsJsonObject("cve_lookup");
+                if (cl != null && cl.has("queries")) {
+                    JsonArray q = cl.getAsJsonArray("queries");
+                    int totalCves = 0;
+                    if (q != null) {
+                        for (JsonElement el : q) {
+                            if (el.isJsonObject() && el.getAsJsonObject().has("cves")) {
+                                totalCves += el.getAsJsonObject().getAsJsonArray("cves").size();
+                            }
+                        }
+                        summary.append("CVE lookup: ").append(q.size()).append(" queries, ").append(totalCves).append(" CVEs\n");
+                    }
+                }
             }
             if (report.has("diff")) {
                 JsonObject diff = report.getAsJsonObject("diff");
@@ -1586,6 +1901,136 @@ public class UnveilTab {
                     }
                 }
             }
+            interestingStringsModel.setRowCount(0);
+            if (report.has("interesting_strings")) {
+                JsonArray isArr = report.getAsJsonArray("interesting_strings");
+                if (isArr != null) {
+                    for (JsonElement el : isArr) {
+                        if (el.isJsonObject()) {
+                            JsonObject o = el.getAsJsonObject();
+                            String file = str(o.get("file"));
+                            if (file == null) file = "";
+                            if (o.has("strings") && o.get("strings").isJsonArray()) {
+                                for (JsonElement sEl : o.getAsJsonArray("strings")) {
+                                    String s = sEl != null && sEl.isJsonPrimitive() ? sEl.getAsString() : "";
+                                    interestingStringsModel.addRow(new Object[] { file, s });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            permissionFindingsModel.setRowCount(0);
+            if (report.has("permission_findings")) {
+                JsonArray pf = report.getAsJsonArray("permission_findings");
+                if (pf != null) {
+                    for (JsonElement el : pf) {
+                        if (el.isJsonObject()) {
+                            JsonObject o = el.getAsJsonObject();
+                            permissionFindingsModel.addRow(new Object[] {
+                                str(o.get("path")),
+                                str(o.get("finding")),
+                                str(o.get("detail"))
+                            });
+                        }
+                    }
+                }
+            }
+            certFindingsModel.setRowCount(0);
+            if (report.has("cert_findings")) {
+                JsonArray cf = report.getAsJsonArray("cert_findings");
+                if (cf != null) {
+                    for (JsonElement el : cf) {
+                        if (el.isJsonObject()) {
+                            JsonObject o = el.getAsJsonObject();
+                            String path = str(o.get("path"));
+                            String subject = o.has("error") ? str(o.get("error")) : str(o.get("subject"));
+                            String expired = o.has("error") ? "" : (o.has("expired") && o.get("expired").getAsBoolean() ? "Yes" : "No");
+                            String selfSigned = o.has("error") ? "" : (o.has("self_signed") && o.get("self_signed").getAsBoolean() ? "Yes" : "No");
+                            certFindingsModel.addRow(new Object[] { path, subject, expired, selfSigned });
+                        }
+                    }
+                }
+            }
+            dotnetFindingsModel.setRowCount(0);
+            if (report.has("dotnet_findings")) {
+                JsonArray df = report.getAsJsonArray("dotnet_findings");
+                if (df != null) {
+                    for (JsonElement el : df) {
+                        if (el.isJsonObject()) {
+                            JsonObject o = el.getAsJsonObject();
+                            String path = str(o.get("path"));
+                            String asm = str(o.get("assembly_name"));
+                            String ver = str(o.get("version"));
+                            String serRef = (o.has("refs_serialization") && o.get("refs_serialization").getAsBoolean()) ? "Yes" : "No";
+                            StringBuilder hints = new StringBuilder();
+                            if (o.has("dangerous_hints") && o.get("dangerous_hints").isJsonArray()) {
+                                JsonArray h = o.getAsJsonArray("dangerous_hints");
+                                for (int i = 0; i < h.size(); i++) {
+                                    if (i > 0) hints.append("; ");
+                                    hints.append(str(h.get(i)));
+                                }
+                            }
+                            dotnetFindingsModel.addRow(new Object[] { path, asm, ver, serRef, hints.toString() });
+                        }
+                    }
+                }
+            }
+            cveLookupModel.setRowCount(0);
+            if (report.has("cve_lookup") && !report.get("cve_lookup").isJsonNull()) {
+                JsonObject cl = report.getAsJsonObject("cve_lookup");
+                if (cl != null && cl.has("queries")) {
+                    JsonArray queries = cl.getAsJsonArray("queries");
+                    if (queries != null) {
+                        for (JsonElement qEl : queries) {
+                            if (!qEl.isJsonObject()) continue;
+                            JsonObject qo = qEl.getAsJsonObject();
+                            String query = str(qo.get("query"));
+                            if (query == null) query = "";
+                            JsonArray cves = qo.has("cves") ? qo.getAsJsonArray("cves") : null;
+                            if (cves != null) {
+                                for (JsonElement cEl : cves) {
+                                    if (!cEl.isJsonObject()) continue;
+                                    JsonObject cve = cEl.getAsJsonObject();
+                                    String id = str(cve.get("id"));
+                                    Object score = cve.has("score") && !cve.get("score").isJsonNull() ? cve.get("score").getAsDouble() : "";
+                                    String published = str(cve.get("published"));
+                                    String cveSummary = str(cve.get("summary"));
+                                    if (cveSummary != null && cveSummary.length() > 200) cveSummary = cveSummary.substring(0, 197) + "...";
+                                    cveLookupModel.addRow(new Object[] { query, id != null ? id : "", score, published != null ? published : "", cveSummary != null ? cveSummary : "" });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            instrumentationHintsModel.setRowCount(0);
+            if (report.has("instrumentation_hints")) {
+                JsonArray ih = report.getAsJsonArray("instrumentation_hints");
+                if (ih != null) {
+                    for (JsonElement el : ih) {
+                        if (el.isJsonObject()) {
+                            JsonObject o = el.getAsJsonObject();
+                            instrumentationHintsModel.addRow(new Object[] {
+                                str(o.get("surface")),
+                                str(o.get("component_label")),
+                                str(o.get("suggestion")),
+                                str(o.get("frida_hint"))
+                            });
+                        }
+                    }
+                }
+            }
+            pathsToWatchModel.clear();
+            if (report.has("paths_to_watch")) {
+                JsonArray pw = report.getAsJsonArray("paths_to_watch");
+                if (pw != null) {
+                    for (JsonElement el : pw) {
+                        if (el.isJsonPrimitive())
+                            pathsToWatchModel.addElement(el.getAsString());
+                    }
+                }
+            }
             checklistModel.setRowCount(0);
             if (report.has("checklist_findings")) {
                 JsonArray cf = report.getAsJsonArray("checklist_findings");
@@ -1597,7 +2042,8 @@ public class UnveilTab {
                                 str(row.get("file")),
                                 str(row.get("pattern")),
                                 str(row.get("snippet")),
-                                row.has("line") ? row.get("line").getAsInt() : ""
+                                row.has("line") ? row.get("line").getAsInt() : "",
+                                str(row.get("severity"))
                             });
                         }
                     }
@@ -2370,6 +2816,7 @@ public class UnveilTab {
                 if (optOffensive.isSelected()) args.add("-O");
                 if (optForce.isSelected()) args.add("-f");
                 if (optCve.isSelected()) args.add("--cve");
+                if (optCveLookup.isSelected()) args.add("--cve-lookup");
                 ProcessBuilder pb = new ProcessBuilder(args);
                 pb.redirectErrorStream(true);
                 Process p = pb.start();

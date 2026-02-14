@@ -1,5 +1,6 @@
 import os
 import plistlib
+import re
 import subprocess
 import tempfile
 import shutil
@@ -205,6 +206,52 @@ def strings(target, min_len=4):
 
     out = _run(["strings", "-n", str(min_len), target])
     return out.splitlines()
+
+
+# Patterns for "interesting" strings (URLs, IPs, paths, secrets-related) — pen-test actionable
+_INTERESTING_URL = re.compile(r"https?://[^\s\x00]{8,}", re.IGNORECASE)
+_INTERESTING_IP = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b")
+_INTERESTING_PATH = re.compile(r"(?:[A-Za-z]:\\|/)(?:[^\s\x00]{3,})?(?:\.(?:exe|dll|so|dylib|config|json|xml|js))\b", re.IGNORECASE)
+_INTERESTING_SECRET_KEY = re.compile(r"(?i)(?:api[_-]?key|password|secret|token|auth|bearer|connectionstring)[\s=:][^\s\x00]{4,}")
+
+
+def interesting_strings(target, max_per_file=100, min_len=6):
+    """
+    Harvest strings from a binary and return those likely useful for pen testing:
+    URLs, IPs, path-like refs, and secret/key-like patterns. Capped per file to keep report size sane.
+    """
+    if not os.path.exists(target) or not os.path.isfile(target):
+        return []
+    if shutil.which("strings") is None:
+        return []
+    try:
+        raw = strings(target, min_len=min_len)
+    except Exception:
+        return []
+    seen = set()
+    out = []
+    for s in raw:
+        if len(s) > 500:
+            continue
+        s_clean = s.strip()
+        if not s_clean or s_clean in seen:
+            continue
+        if _INTERESTING_URL.search(s_clean) or _INTERESTING_IP.search(s_clean):
+            seen.add(s_clean)
+            out.append(s_clean)
+            if len(out) >= max_per_file:
+                return out
+        elif _INTERESTING_PATH.search(s_clean):
+            seen.add(s_clean)
+            out.append(s_clean)
+            if len(out) >= max_per_file:
+                return out
+        elif _INTERESTING_SECRET_KEY.search(s_clean):
+            seen.add(s_clean)
+            out.append(s_clean)
+            if len(out) >= max_per_file:
+                return out
+    return out
 
 
 def entropy(target):

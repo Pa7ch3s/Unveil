@@ -1,5 +1,6 @@
 import argparse
 import json
+import sys
 from pathlib import Path
 from unveil.engine import run
 from unveil.cli_printer import pretty
@@ -27,13 +28,13 @@ def main():
     p.add_argument("--version", action="version", version=f"Unveil RADAR v{VERSION}")
 
     p.add_argument("-C", "--target", required=True,
-                   help="Target directory or application bundle to analyze")
+                   help="Target to analyze: directory or .app for full recon; single file (e.g. .exe, .dll) for one binary; or .dmg, .ipa, .apk, .jar/.war")
 
     p.add_argument("-e", action="store_true",
-                   help="Enable extended surface expansion (deep persistence & lateral surfaces)")
+                   help="Extended surface expansion (persistence, helpers, ATS). Use with directory/.app; combine with -O for full attack graph.")
 
     p.add_argument("-O", action="store_true",
-                   help="Enable offensive surface synthesis (exploit-chain modeling)")
+                   help="Offensive surface synthesis (exploit-chain modeling and attack graph). Use with -e for best coverage.")
 
     p.add_argument("-f", action="store_true",
                    help="Force analysis of unsigned / malformed binaries")
@@ -71,20 +72,37 @@ def main():
     p.add_argument("--cve", action="store_true",
                    help="Add possible_cves (suggested hunt queries from verdict) to report")
 
+    p.add_argument("--cve-lookup", action="store_true",
+                   help="Query NVD API for CVEs (set NVD_API_KEY for higher rate limit)")
+
     args = p.parse_args()
 
     if args.verbose:
         import os
         os.environ["UNVEIL_LOG"] = "1"
 
-    report = run(
-        args.target,
-        extended=args.e,
-        offensive=args.O,
-        max_files=args.max_files,
-        max_size_mb=args.max_size_mb,
-        max_per_type=args.max_per_type,
-    )
+    try:
+        report = run(
+            args.target,
+            extended=args.e,
+            offensive=args.O,
+            max_files=args.max_files,
+            max_size_mb=args.max_size_mb,
+            max_per_type=args.max_per_type,
+            cve_lookup=getattr(args, "cve_lookup", False),
+        )
+    except Exception as e:
+        err = str(e) or type(e).__name__
+        sys.stderr.write("Unveil failed: " + err + "\n")
+        if args.verbose:
+            raise
+        sys.exit(1)
+
+    # Exit non-zero when engine returned an error (e.g. target not found, DMG mount failed)
+    if report.get("metadata", {}).get("error"):
+        if not args.quiet:
+            pretty(report)
+        sys.exit(1)
 
     if getattr(args, "baseline", None):
         try:

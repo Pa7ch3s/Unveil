@@ -21,6 +21,7 @@ class ScanRequest(BaseModel):
     max_files: Optional[int] = None
     max_size_mb: Optional[int] = None
     max_per_type: Optional[int] = None
+    cve_lookup: bool = False
 
 
 def _validate_target(target: str) -> str:
@@ -52,6 +53,7 @@ def scan(req: ScanRequest):
             max_files=req.max_files,
             max_size_mb=req.max_size_mb,
             max_per_type=req.max_per_type,
+            cve_lookup=req.cve_lookup,
         )
         return report
     except HTTPException:

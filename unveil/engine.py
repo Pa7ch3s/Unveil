@@ -1,5 +1,5 @@
 from unveil.classifier import classify
-from unveil.static_parser import analyze, clear_analysis_cache, specifications_for_target
+from unveil.static_parser import analyze, clear_analysis_cache, specifications_for_target, interesting_strings
 from unveil.surface_expander import expand
 from unveil.surface_synth import synthesize
 from unveil.verdict_compiler import compile
@@ -10,6 +10,11 @@ from unveil.chainability import build_chainability
 from unveil.checklist_scan import run_checklist
 from unveil.attack_graph import build_attack_graph
 from unveil.missing_link_engine import enrich_hunt_plan_with_matched_paths
+from unveil.permission_audit import run_audit as permission_audit
+from unveil.cert_audit import run_cert_audit
+from unveil.dotnet_audit import run_dotnet_audit
+from unveil.cve_lookup import enrich_report_cve_lookup
+from unveil.instrumentation_hints import build_instrumentation_hints
 from pathlib import Path
 import sys
 import tempfile
@@ -67,10 +72,32 @@ def tick(msg):
     sys.stderr.flush()
 
 
-def _empty_report(target, reason="UNKNOWN"):
+def _paths_to_watch_from_assets(discovered_assets, results, target):
+    """Build sorted list of paths to watch for process monitor correlation (cap 300)."""
+    out = set()
+    base = Path(target).resolve()
+    if base.is_dir():
+        out.add(str(base))
+    for r in results or []:
+        f = r.get("file")
+        if f and isinstance(f, str):
+            out.add(f)
+    for paths in (discovered_assets or {}).values():
+        for p in (paths or [])[:50]:
+            if p and isinstance(p, str):
+                out.add(p)
+    return sorted(out)
+
+
+def _empty_report(target, reason="UNKNOWN", error=None):
     """Return a minimal report dict with all keys present. Use for early exits (DMG/IPA/APK fail)."""
+    meta = {"target": target}
+    if error is not None:
+        meta["error"] = error
+    elif reason != "UNKNOWN":
+        meta["skip_reason"] = reason
     return {
-        "metadata": {"target": target},
+        "metadata": meta,
         "specifications": {},
         "results": [],
         "verdict": {"exploitability_band": reason, "missing_roles": ["ANCHOR", "BRIDGE", "BLADE"]},
@@ -84,6 +111,14 @@ def _empty_report(target, reason="UNKNOWN"):
         "chainability": [],
         "checklist_findings": [],
         "attack_graph": {"chains": [], "sendable_urls": []},
+        "interesting_strings": [],
+        "permission_findings": [],
+        "cert_findings": [],
+        "dotnet_findings": [],
+        "cve_lookup": None,
+        "instrumentation_hints": [],
+        "paths_to_watch": [],
+        "paths_to_watch_note": "",
     }
 
 
@@ -578,11 +613,18 @@ def run(
     max_size_mb=None,
     max_per_type=None,
     ref_extract_max_files=None,
+    cve_lookup=False,
 ):
     _resolve_limits(max_files=max_files, max_size_mb=max_size_mb, max_per_type=max_per_type)
     ref_extract_max = _config.get_ref_extract_max_files(ref_extract_max_files)
     clear_analysis_cache()
-    base = Path(target)
+    base = Path(target).resolve()
+    if not base.exists():
+        return _empty_report(
+            str(target),
+            reason="TARGET_NOT_FOUND",
+            error="Target path does not exist: " + str(base),
+        )
     results = []
     unmount_dmg = None
 
@@ -600,7 +642,7 @@ def run(
             err = (r.stderr or r.stdout or "").strip() or "unknown"
             _config.log("error", "DMG mount failed", target=target, stderr=err)
             tick("[DMG] mount failed")
-            return _empty_report(target)
+            return _empty_report(target, reason="DMG_MOUNT_FAILED", error="DMG mount failed: " + err[:200])
         base = Path(mount_dir)
         unmount_dmg = mount_dir
 
@@ -613,7 +655,7 @@ def run(
         if root is None or not root.is_dir():
             _config.log("error", "IPA unpack failed", target=target)
             tick("[IPA] unpack failed")
-            return _empty_report(target)
+            return _empty_report(target, reason="IPA_UNPACK_FAILED", error="IPA unpack failed")
         base = root
         unpack_dir = tmp
 
@@ -624,7 +666,7 @@ def run(
         if root is None or not root.is_dir():
             _config.log("error", "APK unpack failed", target=target)
             tick("[APK] unpack failed")
-            return _empty_report(target)
+            return _empty_report(target, reason="APK_UNPACK_FAILED", error="APK unpack failed")
         base = root
         unpack_dir = tmp
         tick(f"[SCAN] {target}")
@@ -644,6 +686,22 @@ def run(
             verdict["hunt_plan"] = enrich_hunt_plan_with_matched_paths(verdict["hunt_plan"], discovered_assets)
         if unpack_dir:
             shutil.rmtree(unpack_dir, ignore_errors=True)
+        apk_interesting = []
+        total_cap = 2000
+        total_n = 0
+        for r in results:
+            if total_n >= total_cap:
+                break
+            path = r.get("file")
+            if path and isinstance(path, str):
+                try:
+                    strs = interesting_strings(path, max_per_file=100)
+                    if strs:
+                        take = strs[: total_cap - total_n]
+                        apk_interesting.append({"file": path, "strings": take})
+                        total_n += len(take)
+                except Exception:
+                    pass
         return {
             "metadata": {"target": target},
             "specifications": specifications_for_target(target) or {},
@@ -659,6 +717,13 @@ def run(
             "chainability": build_chainability(extracted_refs, discovered_assets),
             "checklist_findings": run_checklist(discovered_assets),
             "attack_graph": build_attack_graph(verdict, build_chainability(extracted_refs, discovered_assets), extracted_refs, discovered_html_apk),
+            "interesting_strings": apk_interesting,
+            "permission_findings": [],
+            "cert_findings": run_cert_audit(discovered_assets),
+            "dotnet_findings": [],
+            "instrumentation_hints": build_instrumentation_hints((build_attack_graph(verdict, build_chainability(extracted_refs, discovered_assets), extracted_refs, discovered_html_apk).get("chains") or [])),
+            "paths_to_watch": _paths_to_watch_from_assets(discovered_assets, results, target)[:300],
+            "paths_to_watch_note": "Run ProcMon (Windows) or fs_usage (macOS) and filter for these paths to correlate static findings with runtime behavior.",
         }
 
     # -------- JAR/WAR Mode: unpack and report manifest --------
@@ -714,6 +779,13 @@ def run(
             "chainability": build_chainability(extracted_refs_jar, discovered_assets_jar),
             "checklist_findings": run_checklist(discovered_assets_jar),
             "attack_graph": build_attack_graph(verdict, build_chainability(extracted_refs_jar, discovered_assets_jar), extracted_refs_jar, list(discovered_assets_jar.get("html") or [])),
+            "interesting_strings": [],
+            "permission_findings": permission_audit(target),
+            "cert_findings": run_cert_audit(discovered_assets_jar),
+            "dotnet_findings": [],
+            "instrumentation_hints": [],
+            "paths_to_watch": _paths_to_watch_from_assets(discovered_assets_jar, [entry], target)[:300],
+            "paths_to_watch_note": "Run ProcMon (Windows) or fs_usage (macOS) and filter for these paths to correlate static findings with runtime behavior.",
         }
 
     # -------- Single File Mode (non-DMG file) --------
@@ -736,6 +808,14 @@ def run(
             discovered_assets["script"] = [str(base.resolve())]
         discovered_html_single = list(discovered_assets.get("html") or [])
         checklist_single = run_checklist(discovered_assets)
+        single_interesting = []
+        try:
+            strs = interesting_strings(str(base), max_per_file=200)
+            if strs:
+                single_interesting = [{"file": str(base), "strings": strs}]
+        except Exception:
+            pass
+        single_dotnet = run_dotnet_audit([entry]) if (entry.get("analysis") or {}).get("dotnet") else []
         return {
             "metadata": {"target": target},
             "specifications": specifications_for_target(target) or {},
@@ -751,6 +831,13 @@ def run(
             "chainability": [],
             "checklist_findings": checklist_single,
             "attack_graph": {"chains": [], "sendable_urls": []},
+            "interesting_strings": single_interesting,
+            "permission_findings": permission_audit(target),
+            "cert_findings": run_cert_audit(discovered_assets),
+            "dotnet_findings": single_dotnet,
+            "instrumentation_hints": [],
+            "paths_to_watch": _paths_to_watch_from_assets(discovered_assets, [entry], target)[:300],
+            "paths_to_watch_note": "Run ProcMon (Windows) or fs_usage (macOS) and filter for these paths to correlate static findings with runtime behavior.",
         }
 
     # -------- Directory Mode (or mounted DMG) --------
@@ -802,7 +889,50 @@ def run(
     chainability = build_chainability(extracted_refs, discovered_assets)
     if verdict.get("hunt_plan"):
         verdict["hunt_plan"] = enrich_hunt_plan_with_matched_paths(verdict["hunt_plan"], discovered_assets)
-    return {
+
+    # P0: .NET assembly audit (name, version, dangerous API hints)
+    dotnet_findings_list = run_dotnet_audit(results)
+
+    # P0: Interesting strings from binaries (URLs, IPs, paths, secret-like) — cap total for report size
+    interesting_strings_list = []
+    total_strings_cap = 2000
+    total_count = 0
+    for r in results:
+        if total_count >= total_strings_cap:
+            break
+        path = r.get("file")
+        if not path or not isinstance(path, str):
+            continue
+        try:
+            strs = interesting_strings(path, max_per_file=100)
+            if strs:
+                remaining = total_strings_cap - total_count
+                take = strs[:remaining]
+                interesting_strings_list.append({"file": path, "strings": take})
+                total_count += len(take)
+        except Exception:
+            pass
+
+    attack_graph = build_attack_graph(verdict, chainability, extracted_refs, discovered_html)
+    instrumentation_hints_list = build_instrumentation_hints(attack_graph.get("chains") or [])
+
+    # P2: Paths to watch for process monitor correlation (ProcMon / fs_usage)
+    paths_to_watch_set = set()
+    base_resolved = Path(target).resolve()
+    if base_resolved.is_dir():
+        paths_to_watch_set.add(str(base_resolved))
+    for r in results:
+        f = r.get("file")
+        if f and isinstance(f, str):
+            paths_to_watch_set.add(f)
+    for _type, paths in (discovered_assets or {}).items():
+        for p in (paths or [])[:50]:
+            if p and isinstance(p, str):
+                paths_to_watch_set.add(p)
+    paths_to_watch_list = _paths_to_watch_from_assets(discovered_assets, results, target)[:300]
+    paths_note = "Run ProcMon (Windows) or fs_usage (macOS) and filter for these paths to correlate static findings with runtime behavior."
+
+    report = {
         "metadata": {"target": target},
         "specifications": specifications_for_target(target) or {},
         "results": results,
@@ -816,5 +946,15 @@ def run(
         "electron_info": get_electron_info(discovered_assets),
         "chainability": chainability,
         "checklist_findings": run_checklist(discovered_assets),
-        "attack_graph": build_attack_graph(verdict, chainability, extracted_refs, discovered_html),
+        "attack_graph": attack_graph,
+        "interesting_strings": interesting_strings_list,
+        "permission_findings": permission_audit(target),
+        "cert_findings": run_cert_audit(discovered_assets),
+        "dotnet_findings": dotnet_findings_list,
+        "instrumentation_hints": instrumentation_hints_list,
+        "paths_to_watch": paths_to_watch_list,
+        "paths_to_watch_note": paths_note,
     }
+    if cve_lookup:
+        enrich_report_cve_lookup(report, max_queries=15, max_cves_per_query=5)
+    return report

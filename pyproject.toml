@@ -12,6 +12,7 @@ readme = "README.md"
 
 [project.optional-dependencies]
 test = ["pytest>=7"]
+dotnet = ["dnfile"]
 
 
 [tool.setuptools.packages.find]

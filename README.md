@@ -67,7 +67,58 @@ Models: execution surfaces, trust boundaries, persistence anchors, and lateral b
 
 ---
 
+## Vulnerability mapping
+
+Unveil helps discover and prioritize thick-client flaws that manual testers would otherwise hunt with multiple tools. The table below maps **common vulnerability types** to what Unveil surfaces so you know where to focus.
+
+| Thick-client flaw | What Unveil surfaces |
+|-------------------|----------------------|
+| **DLL / library hijacking** | Qt plugin dir and `@rpath` (ANCHOR); writable plugin paths, `qt.conf`; Windows `.exe`/`.dll` harvest and load paths from refs. |
+| **Insecure storage / secrets** | **Checklist** scan: hardcoded keys, JWT, Slack/GitHub tokens, PEM, disabled SSL in config/json/env/script; discovered assets by type. |
+| **Preload / ASAR hijack (Electron)** | Preload path, ASAR write, and helper surfaces (ANCHOR/BRIDGE); attack graph chains and matched paths; CVE hunt queries for Electron. |
+| **Persistence abuse** | Windows: Run/RunOnce, Services, Scheduled Tasks, Startup, Winlogon, Scripts (ANCHOR). macOS: LaunchAgents, LaunchDaemons, XPC. Linux: systemd, cron, autostart. |
+| **.NET deserialization / assembly load** | CLR assemblies tagged (ANCHOR); deserialization, remoting, assembly-load surfaces with CWE/CVE-style intel. |
+| **Network / TLS (MITM)** | Refs and URLs in config; ATS/plist exceptions; **Send to Repeater** in Burp for http(s) endpoints; checklist flags disabled cert validation. |
+| **Trust boundary / chainability** | `chainability` (file → ref → in scope); `extracted_refs`; attack graph with missing roles and suggested surfaces. |
+
+Use the report’s **attack graph**, **checklist_findings**, and **discovered_assets** as the recon foundation; then follow up with manual testing (e.g. proxy, Frida, or permission checks) where the tool highlights risk. For direction and future ideas (test-case mapping, instrumentation, permission auditing), see **[docs/VISION.md](docs/VISION.md)**. For **gaps and improvements** for new testers, see **[docs/GAPS_AND_IMPROVEMENTS.md](docs/GAPS_AND_IMPROVEMENTS.md)**. For a **senior tester / SME audit** (what is missing for advanced static and dynamic thick-client testing), see **[docs/SENIOR_TESTER_AUDIT.md](docs/SENIOR_TESTER_AUDIT.md)**.
+
+---
+
+## Getting started
+
+1. **Install the CLI:** `pipx install git+https://github.com/Pa7ch3s/Unveil.git` (requires Python 3.9+).
+2. **Run a first scan:** `unveil -C /path/to/your/app` (e.g. a `.app` bundle, or `C:\Program Files\MyApp` on Windows). Use a directory or `.app` for full recon; use a single file (e.g. `.exe`) for one binary only.
+3. **Read the output:** Banner → Nmap-style summary (target, exploitability band, missing roles, surface counts) → full JSON. For a richer first pass, add `-e -O`: `unveil -C /path/to/app -e -O`.
+
+**With Burp:** Load the [Unveil extension](unveil-burp/) (build JAR or download from Releases), set the target path in the tab, click **Scan**. If you see “unveil not found”, install the CLI above and set **Unveil executable (optional)** to the path from `which unveil` (or use **Use daemon** and start the daemon with `unveil` or `python -m unveil.daemon`). Use **Send selected to Repeater** on the Attack graph tab to send URLs to Burp.
+
+**Report at a glance:** **Summary** = high-level verdict and counts; **Attack graph** = what to hunt (missing role → surface → targets); **Checklist** = potential secrets and config risks (with severity); **Discovered assets** = files by type; **Chainability** = which file references which path/URL; **Instrumentation hints** = per-surface hook/Frida suggestions; **Paths to watch** = paths for process monitor correlation.
+
+**Process monitor correlation (P2):** The report includes `paths_to_watch` (install dir, binaries, config paths). In Burp, use the **Paths to watch** tab and **Copy all paths**; then run **ProcMon** (Windows) or **fs_usage** (macOS) filtered to those paths to see what the app actually touches at runtime and correlate with static findings.
+
+**Custom checklist patterns:** Set `UNVEIL_CHECKLIST_EXTRA` to the path of a JSON file. Each entry: `{"pattern_name": "...", "regex": "...", "severity": "credential"|"dangerous_config"|"informational"}`. Built-in patterns have severity (credential, dangerous_config, informational) for prioritization.
+
+---
+
+## Glossary
+
+| Term | Meaning |
+|------|---------|
+| **ANCHOR** | Persistence / foothold — a way to run again or influence what the app loads (e.g. Qt plugin dir, Windows Run key, Electron preload). |
+| **BRIDGE** | Lateral movement — moving between processes or privilege (e.g. helper processes, network, IPC). |
+| **BLADE** | Code execution — running attacker-controlled code in the app (e.g. renderer, main process). |
+| **Exploitability band** | Summary risk level derived from surfaces and missing roles. |
+| **Chainability** | File → ref links: which discovered file references which path or URL (for trust boundaries and “what loads what”). |
+| **Attack graph** | Chains of “missing role → vulnerable component → hunt targets” with matched paths from the scan; plus sendable http(s) URLs. |
+
+Unveil models a simple kill chain: get a foothold (ANCHOR), move laterally (BRIDGE), achieve code execution (BLADE). The report highlights what’s present and what’s missing so you know where to test next.
+
+---
+
 ## Install
+
+**Requirements:** CLI: Python 3.9+, macOS/Linux/Windows. DMG scan: macOS only. Burp extension: Java 17+, Burp Suite 2023.8+. Optional: [lief](https://github.com/lief-project/LIEF) for faster Mach-O/ELF parsing.
 
 **CLI (recommended):**
 
