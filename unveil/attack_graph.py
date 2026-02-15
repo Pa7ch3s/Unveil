@@ -51,6 +51,9 @@ def build_attack_graph(
         role_description = ROLE_DESCRIPTIONS.get(missing_role) or ""
         component_label = SURFACE_LABELS.get(suggested_surface) or suggested_surface or role_label
         suggested_payloads = get_payloads_for_surface(suggested_surface)
+        matched_paths = entry.get("matched_paths") or []
+        # P0: confidence for prioritisation (high = paths matched; low = no paths yet)
+        confidence = "high" if len(matched_paths) > 0 else "low"
         chains.append({
             "missing_role": missing_role,
             "missing_role_label": role_label,
@@ -59,8 +62,9 @@ def build_attack_graph(
             "component_label": component_label,
             "hunt_targets": hunt_targets_str,
             "reason": reason,
-            "matched_paths": entry.get("matched_paths") or [],
+            "matched_paths": matched_paths,
             "suggested_payloads": suggested_payloads,
+            "confidence": confidence,
         })
 
     # ---- Sendable URLs from extracted_refs

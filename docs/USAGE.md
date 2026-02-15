@@ -12,7 +12,7 @@ Step-by-step commands with full syntax. Add a screenshot below each example if d
 unveil --version
 ```
 
-Displays the installed Unveil version (e.g. `Unveil RADAR v0.10.0`).
+Displays the installed Unveil version (e.g. `Unveil RADAR v0.10.3`).
 
 ---
 
@@ -231,7 +231,7 @@ unveil -C /path/to/target --baseline previous.json -xj current.json
 | `-C`, `--target` | **Required.** Path to directory, .app, file, .dmg, .ipa, .apk, or .jar/.war. |
 | `-e` | Extended surface expansion. |
 | `-O` | Offensive surface synthesis (exploit-chain modeling). |
-| `-f` | Force analysis of unsigned/malformed binaries. |
+| `-f` | Force analysis of unsigned/malformed binaries (reserved; engine accepts it for future use). |
 | `-q`, `--quiet` | Suppress banner and pretty summary. |
 | `-V`, `--verbose` | Structured JSON log to stderr (or `UNVEIL_LOG=1`). |
 | `--max-files N` | Max binaries to analyze (env: `UNVEIL_MAX_FILES`). |

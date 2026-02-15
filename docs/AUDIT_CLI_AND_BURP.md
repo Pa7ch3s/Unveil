@@ -123,7 +123,7 @@ Burp builds the CLI argument list correctly (including `-f`). The only mismatch 
 ### CLI
 
 - [ ] **Optional:** Pass `args.f` (force) into `engine.run()` and implement force behavior in the engine, or document `-f` as reserved.
-- [ ] **Optional:** On baseline apply failure, log or warn instead of failing silently.
+- [x] On baseline apply failure, log to stderr (was silent).
 
 ### Recommendations
 

@@ -46,6 +46,10 @@ CHECKLIST_PATTERNS: List[Tuple[str, re.Pattern, str]] = [
     ("debug_true", re.compile(r"(?i)(?:debug|verbose)\s*[=:]\s*(?:true|1|yes)"), SEVERITY_DANGEROUS),
     ("disabled_ssl", re.compile(r"(?i)(?:rejectUnauthorized|strictSSL|verify)\s*[=:]\s*(?:false|0)"), SEVERITY_DANGEROUS),
     ("eval_or_danger", re.compile(r"(?i)(?:eval\s*\(|new\s+Function\s*\(|document\.write\s*\(|innerHTML\s*=)"), SEVERITY_DANGEROUS),
+    # P1: TLS / cert pinning hints (so we know when to use Frida/cert bypass)
+    ("cert_pinning", re.compile(r"(?i)(?:certificate\s*pinning|ssl\s*pinning|publickeypins|pinning\s*cert|TrustKit|CertificatePinner)"), SEVERITY_INFO),
+    ("ats_insecure_exception", re.compile(r"(?i)(?:NSExceptionAllowsInsecureHTTPLoads|NSExceptionMinimumTLSVersion|NSAppTransportSecurity|NSTemporaryExceptionAllowsInsecureHTTPLoads)"), SEVERITY_DANGEROUS),
+    ("insecure_cleartext", re.compile(r"(?i)(?:cleartext\s*traffic|usesCleartextTraffic|allowCleartext)"), SEVERITY_DANGEROUS),
 ]
 
 

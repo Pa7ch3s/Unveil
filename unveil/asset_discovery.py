@@ -225,10 +225,51 @@ def run_reference_extraction(discovered_assets, max_files_per_type=REF_EXTRACT_M
     return [{"file": f, "refs": list(refs)[:100]} for f, refs in file_refs.items()]
 
 
+def collect_update_refs(extracted_refs, max_refs=150):
+    """
+    P1: From extracted_refs, collect refs that look like update/installer/version-check.
+    Tags: possible_update_url, possible_installer_path, possible_update_over_http (MITM).
+    Returns list of {"file", "ref", "tags": [str]}.
+    """
+    import re
+    out = []
+    update_keywords = re.compile(
+        r"\b(update|updater|installer|version|check|download|upgrade|patch)\b", re.IGNORECASE
+    )
+    http_ref = re.compile(r"^https?://", re.IGNORECASE)
+    insecure_ref = re.compile(r"^http://", re.IGNORECASE)
+    seen = set()
+    for item in (extracted_refs or []):
+        source = item.get("file") or ""
+        for ref in (item.get("refs") or []):
+            if not ref or len(ref) > 300:
+                continue
+            ref_strip = ref.strip()
+            if not update_keywords.search(ref_strip):
+                continue
+            key = (source, ref_strip)
+            if key in seen:
+                continue
+            seen.add(key)
+            tags = []
+            if http_ref.search(ref_strip) or "/" in ref_strip or "\\" in ref_strip:
+                tags.append("possible_update_url")
+            if "install" in ref_strip.lower() or "path" in ref_strip.lower() or "\\" in ref_strip or ref_strip.endswith((".exe", ".msi", ".dmg", ".pkg")):
+                tags.append("possible_installer_path")
+            if insecure_ref.match(ref_strip):
+                tags.append("possible_update_over_http")
+            if tags:
+                out.append({"file": source, "ref": ref_strip, "tags": tags})
+                if len(out) >= max_refs:
+                    return out
+    return out
+
+
 def collect_non_http_refs(extracted_refs, max_refs=100):
     """
     From extracted_refs, collect refs that look like non-HTTP endpoints: ws://, wss://, or port-only.
-    Returns list of {"file": path, "ref": ref_value} for report non_http_refs.
+    Returns list of {"file": path, "ref": ref_value, "tag": "likely_websocket"|"port_only"} for report non_http_refs.
+    Use report section and Burp proxy note so testers know to use listener for WebSocket/non-HTTP.
     """
     import re
     out = []
@@ -245,12 +286,12 @@ def collect_non_http_refs(extracted_refs, max_refs=100):
                 continue
             if ws_pattern.search(ref_strip):
                 seen.add(ref_strip)
-                out.append({"file": source, "ref": ref_strip})
+                out.append({"file": source, "ref": ref_strip, "tag": "likely_websocket"})
                 if len(out) >= max_refs:
                     return out
             elif port_only.match(ref_strip):
                 seen.add(ref_strip)
-                out.append({"file": source, "ref": ref_strip})
+                out.append({"file": source, "ref": ref_strip, "tag": "port_only"})
                 if len(out) >= max_refs:
                     return out
     return out

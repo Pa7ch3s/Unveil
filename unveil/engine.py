@@ -24,6 +24,10 @@ from unveil.cve_lookup import enrich_report_cve_lookup
 from unveil.instrumentation_hints import build_instrumentation_hints
 from unveil.thick_client_findings import build_thick_client_findings
 from unveil.payloads import get_payload_library
+from unveil.findings_export import build_findings_table
+from unveil.apk_manifest import get_apk_manifest_summary
+from unveil.credential_hints import build_credential_hints
+from unveil.db_summary import get_db_summary
 from pathlib import Path
 import sys
 import tempfile
@@ -133,6 +137,12 @@ def _empty_report(target, reason="UNKNOWN", error=None):
         "non_http_refs": [],
         "thick_client_findings": [],
         "payload_library": [],
+        "update_refs": [],
+        "tls_pinning_hints": [],
+        "suggested_order": [],
+        "apk_manifest": {},
+        "credential_hints": [],
+        "db_summary": [],
     }
 
 
@@ -628,7 +638,9 @@ def run(
     max_per_type=None,
     ref_extract_max_files=None,
     cve_lookup=False,
+    force=False,
 ):
+    # force: reserved for future use (e.g. allow unsigned/malformed binaries); currently no-op
     _resolve_limits(max_files=max_files, max_size_mb=max_size_mb, max_per_type=max_per_type)
     ref_extract_max = _config.get_ref_extract_max_files(ref_extract_max_files)
     clear_analysis_cache()
@@ -716,7 +728,7 @@ def run(
                         total_n += len(take)
                 except Exception:
                     pass
-        return {
+        apk_report = {
             "metadata": {"target": target},
             "specifications": specifications_for_target(target) or {},
             "results": results,
@@ -748,7 +760,14 @@ def run(
                 discovered_assets, build_chainability(extracted_refs, discovered_assets),
             ),
             "payload_library": get_payload_library(),
+            "apk_manifest": get_apk_manifest_summary(str(Path(target).resolve())),
         }
+        apk_report["update_refs"] = asset_discovery.collect_update_refs(extracted_refs)
+        apk_report["tls_pinning_hints"] = [c for c in (apk_report.get("checklist_findings") or []) if isinstance(c, dict) and c.get("pattern") in ("cert_pinning", "ats_insecure_exception", "insecure_cleartext")]
+        apk_report["suggested_order"] = build_findings_table(apk_report, max_rows=15)
+        apk_report["credential_hints"] = build_credential_hints(results, discovered_assets)
+        apk_report["db_summary"] = get_db_summary(discovered_assets)
+        return apk_report
 
     # -------- JAR/WAR Mode: unpack and report manifest --------
     if base.is_file() and base.suffix.lower() in (".jar", ".war") and not unmount_dmg:
@@ -788,7 +807,7 @@ def run(
                 verdict["hunt_plan"] = enrich_hunt_plan_with_matched_paths(verdict["hunt_plan"], discovered_assets_jar)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
-        return {
+        jar_report = {
             "metadata": {"target": target},
             "specifications": specifications_for_target(target) or {},
             "results": [entry],
@@ -816,6 +835,13 @@ def run(
             "thick_client_findings": [],
             "payload_library": get_payload_library(),
         }
+        jar_report["update_refs"] = asset_discovery.collect_update_refs(extracted_refs_jar)
+        jar_report["tls_pinning_hints"] = [c for c in (jar_report.get("checklist_findings") or []) if isinstance(c, dict) and c.get("pattern") in ("cert_pinning", "ats_insecure_exception", "insecure_cleartext")]
+        jar_report["suggested_order"] = build_findings_table(jar_report, max_rows=15)
+        jar_report["credential_hints"] = build_credential_hints([entry], discovered_assets_jar)
+        jar_report["db_summary"] = get_db_summary(discovered_assets_jar)
+        jar_report["apk_manifest"] = {}
+        return jar_report
 
     # -------- Single File Mode (non-DMG file) --------
     if base.is_file() and not unmount_dmg:
@@ -845,7 +871,7 @@ def run(
         except Exception:
             pass
         single_dotnet = run_dotnet_audit([entry]) if (entry.get("analysis") or {}).get("dotnet") else []
-        return {
+        single_report = {
             "metadata": {"target": target},
             "specifications": specifications_for_target(target) or {},
             "results": [entry],
@@ -876,6 +902,13 @@ def run(
             ),
             "payload_library": get_payload_library(),
         }
+        single_report["update_refs"] = []
+        single_report["tls_pinning_hints"] = [c for c in (single_report.get("checklist_findings") or []) if isinstance(c, dict) and c.get("pattern") in ("cert_pinning", "ats_insecure_exception", "insecure_cleartext")]
+        single_report["suggested_order"] = build_findings_table(single_report, max_rows=15)
+        single_report["credential_hints"] = build_credential_hints([entry], discovered_assets)
+        single_report["db_summary"] = get_db_summary(discovered_assets)
+        single_report["apk_manifest"] = {}
+        return single_report
 
     # -------- Directory Mode (or mounted DMG) --------
     tick(f"[SCAN] {target}")
@@ -1003,6 +1036,15 @@ def run(
         ),
         "payload_library": get_payload_library(),
     }
+    # P0/P1: update_refs, tls_pinning_hints, suggested_order (top findings for "test this first")
+    report["update_refs"] = asset_discovery.collect_update_refs(extracted_refs)
+    report["tls_pinning_hints"] = [
+        c for c in (report.get("checklist_findings") or [])
+        if isinstance(c, dict) and c.get("pattern") in ("cert_pinning", "ats_insecure_exception", "insecure_cleartext")
+    ]
+    report["suggested_order"] = build_findings_table(report, max_rows=15)
+    report["credential_hints"] = build_credential_hints(report.get("results") or [], report.get("discovered_assets"))
+    report["db_summary"] = get_db_summary(report.get("discovered_assets") or {})
     if cve_lookup:
         enrich_report_cve_lookup(report, max_queries=15, max_cves_per_query=5)
     return report

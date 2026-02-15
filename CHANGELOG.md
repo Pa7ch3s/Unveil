@@ -4,6 +4,11 @@
 
 - (None.)
 
+## [0.10.3] / [0.7.4] — 2026-02-14
+
+- **CLI 0.10.3** — Senior audit P0–P3: findings export (CSV/MD, -xf), suggested order, confidence on chains, TLS/pinning hints, update_refs, credential_hints, db_summary, apk_manifest; Copy evidence, Copy launch command, ProcMon/fs_usage; force (-f) passed to engine (reserved); final bugfixes (dedup key, DB URI, fs_usage quoting).
+- **Burp 0.7.4** — Export findings CSV/MD, Copy evidence, Suggested order in Summary, Confidence column, Update refs / Credential hints / DB summary / Import summary / Packed entropy / Non-HTTP refs tabs; TLS/Pinning filter; Copy launch command, Copy for ProcMon, Copy fs_usage one-liner; proxy note for non-HTTP.
+
 ## [0.10.2] / [0.7.3] — 2026-02-14
 
 - **Burp 0.7.3** — Tab visibility: register tab first, keep Registration reference; fallback error panel; remove proxy reflection (exportProjectOptionsAsJson); View menu hint; audit doc.

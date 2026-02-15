@@ -114,6 +114,7 @@ public class UnveilTab {
     private final DefaultTableModel checklistModel;
     private final JTable checklistTable;
     private final JTextField checklistFilterField;
+    private final JCheckBox checklistTlsPinningOnlyCheck;
     private final DefaultTableModel attackGraphChainsModel;
     private final List<List<PoCPayloadEntry>> attackGraphPayloadsByRow = new ArrayList<>();
     private final DefaultTableModel sendableUrlsModel;
@@ -135,6 +136,18 @@ public class UnveilTab {
     private final List<String> payloadLibraryPayloads = new ArrayList<>();
     private final List<String> payloadLibraryDescriptions = new ArrayList<>();
     private final List<Object[]> payloadLibraryFullData = new ArrayList<>();
+    private final DefaultTableModel updateRefsModel;
+    private final JTable updateRefsTable;
+    private final DefaultTableModel credentialHintsModel;
+    private final JTable credentialHintsTable;
+    private final DefaultTableModel dbSummaryModel;
+    private final JTable dbSummaryTable;
+    private final DefaultListModel<String> importSummaryListModel = new DefaultListModel<>();
+    private final JList<String> importSummaryList;
+    private final DefaultTableModel packedEntropyModel;
+    private final JTable packedEntropyTable;
+    private final DefaultTableModel nonHttpRefsModel;
+    private final JTable nonHttpRefsTable;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private static final String PREFS_NODE = "unveil-burp";
     private static final int RECENT_TARGETS_MAX = 5;
@@ -322,6 +335,10 @@ public class UnveilTab {
         copyProxyUrlBtn.setToolTipText("Copy single proxy URL (e.g. http://127.0.0.1:8080) for apps that take one URL");
         copyProxyUrlBtn.addActionListener(e -> copyProxyUrl());
         proxyCertPanel.add(copyProxyUrlBtn);
+        JButton copyLaunchCmdBtn = new JButton("Copy launch command");
+        copyLaunchCmdBtn.setToolTipText("Copy proxy env and run command (open/start with target path) for one-command proxied launch");
+        copyLaunchCmdBtn.addActionListener(e -> copyLaunchCommand());
+        proxyCertPanel.add(copyLaunchCmdBtn);
         JButton copyCaCertInstructionsBtn = new JButton("Copy CA cert instructions");
         copyCaCertInstructionsBtn.setToolTipText("Copy steps to export and install Burp's CA certificate for TLS interception");
         copyCaCertInstructionsBtn.addActionListener(e -> copyCaCertInstructions());
@@ -330,6 +347,12 @@ public class UnveilTab {
         openSettingsBtn.setToolTipText("Open Burp Settings (Proxy listener is under Tools → Proxy → Options)");
         openSettingsBtn.addActionListener(e -> showProxySettingsHint());
         proxyCertPanel.add(openSettingsBtn);
+        JPanel proxyWrap = new JPanel(new BorderLayout(4, 4));
+        proxyWrap.add(proxyCertPanel, BorderLayout.NORTH);
+        JLabel nonHttpNote = new JLabel("Non-HTTP refs (ws://, wss://, raw ports) are in the report; use Burp for WebSocket/proxy where applicable.");
+        nonHttpNote.setForeground(Color.GRAY);
+        nonHttpNote.setFont(nonHttpNote.getFont().deriveFont(11f));
+        proxyWrap.add(nonHttpNote, BorderLayout.SOUTH);
 
         // Results: toolbar + tabbed view
         this.resultsToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
@@ -348,6 +371,14 @@ public class UnveilTab {
         JButton exportSarifBtn = new JButton("Export SARIF…");
         exportSarifBtn.addActionListener(e -> exportSarif());
         resultsToolbar.add(exportSarifBtn);
+        JButton exportFindingsCsvBtn = new JButton("Export findings CSV…");
+        exportFindingsCsvBtn.setToolTipText("Export unified findings table (from current report) to CSV");
+        exportFindingsCsvBtn.addActionListener(e -> exportFindings(false));
+        resultsToolbar.add(exportFindingsCsvBtn);
+        JButton exportFindingsMdBtn = new JButton("Export findings MD…");
+        exportFindingsMdBtn.setToolTipText("Export unified findings table (from current report) to Markdown");
+        exportFindingsMdBtn.addActionListener(e -> exportFindings(true));
+        resultsToolbar.add(exportFindingsMdBtn);
         resultsToolbar.setVisible(false);
 
         this.resultsTabs = new JTabbedPane();
@@ -660,6 +691,7 @@ public class UnveilTab {
         pathsToWatchNote.setForeground(Color.GRAY);
         pathsToWatchNote.setFont(pathsToWatchNote.getFont().deriveFont(11f));
         pathsToWatchNorth.add(pathsToWatchNote, BorderLayout.NORTH);
+        JPanel pathsToWatchBtnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         JButton pathsToWatchCopyBtn = new JButton("Copy all paths");
         pathsToWatchCopyBtn.addActionListener(e -> {
             StringBuilder sb = new StringBuilder();
@@ -669,11 +701,81 @@ public class UnveilTab {
             }
             if (sb.length() > 0)
                 Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(sb.toString()), null);
+            statusLabel.setText("Paths copied.");
         });
-        pathsToWatchNorth.add(pathsToWatchCopyBtn, BorderLayout.SOUTH);
+        pathsToWatchBtnRow.add(pathsToWatchCopyBtn);
+        JButton copyProcMonBtn = new JButton("Copy for ProcMon");
+        copyProcMonBtn.setToolTipText("Copy paths as ProcMon include filter (Path contains; paste one per line)");
+        copyProcMonBtn.addActionListener(e -> copyPathsToWatchForProcMon());
+        pathsToWatchBtnRow.add(copyProcMonBtn);
+        JButton copyFsUsageBtn = new JButton("Copy fs_usage one-liner");
+        copyFsUsageBtn.setToolTipText("Copy macOS fs_usage -f path command (first 50 paths)");
+        copyFsUsageBtn.addActionListener(e -> copyPathsToWatchFsUsage());
+        pathsToWatchBtnRow.add(copyFsUsageBtn);
+        pathsToWatchNorth.add(pathsToWatchBtnRow, BorderLayout.SOUTH);
         pathsToWatchPanel.add(pathsToWatchNorth, BorderLayout.NORTH);
         pathsToWatchPanel.add(pathsToWatchScroll, BorderLayout.CENTER);
         resultsTabs.addTab("Paths to watch", pathsToWatchPanel);
+
+        // Update refs (update/installer URLs and paths from scan)
+        this.updateRefsModel = new DefaultTableModel(new String[] { "File", "Ref", "Tags" }, 0);
+        this.updateRefsTable = new JTable(updateRefsModel);
+        updateRefsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        updateRefsTable.setAutoCreateRowSorter(true);
+        JPanel updateRefsPanel = new JPanel(new BorderLayout(4, 4));
+        JLabel updateRefsNote = new JLabel("Refs tagged as possible update URL, installer path, or update over HTTP. Prioritize for abuse testing.");
+        updateRefsNote.setForeground(Color.GRAY);
+        updateRefsPanel.add(updateRefsNote, BorderLayout.NORTH);
+        updateRefsPanel.add(new JScrollPane(updateRefsTable), BorderLayout.CENTER);
+        resultsTabs.addTab("Update refs", updateRefsPanel);
+
+        // Credential/storage hints (Keychain, CredMan, DPAPI, safeStorage)
+        this.credentialHintsModel = new DefaultTableModel(new String[] { "Hint", "Path", "Suggestion" }, 0);
+        this.credentialHintsTable = new JTable(credentialHintsModel);
+        credentialHintsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        credentialHintsTable.setAutoCreateRowSorter(true);
+        JPanel credentialHintsPanel = new JPanel(new BorderLayout(4, 4));
+        credentialHintsPanel.add(new JLabel("Credential and storage hints inferred from imports/config (Keychain, CredMan, DPAPI, Electron safeStorage)."), BorderLayout.NORTH);
+        credentialHintsPanel.add(new JScrollPane(credentialHintsTable), BorderLayout.CENTER);
+        resultsTabs.addTab("Credential hints", credentialHintsPanel);
+
+        // DB summary (.db/.sqlite table names and possible credentials hint)
+        this.dbSummaryModel = new DefaultTableModel(new String[] { "Path", "Tables", "Possible credentials hint" }, 0);
+        this.dbSummaryTable = new JTable(dbSummaryModel);
+        dbSummaryTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        dbSummaryTable.setAutoCreateRowSorter(true);
+        JPanel dbSummaryPanel = new JPanel(new BorderLayout(4, 4));
+        dbSummaryPanel.add(new JLabel("Discovered .db/.sqlite: table names and hint if name suggests credentials."), BorderLayout.NORTH);
+        dbSummaryPanel.add(new JScrollPane(dbSummaryTable), BorderLayout.CENTER);
+        resultsTabs.addTab("DB summary", dbSummaryPanel);
+
+        // Import summary (unique DLLs/symbols — "does it load something weird?")
+        this.importSummaryList = new JList<>(importSummaryListModel);
+        importSummaryList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        JPanel importSummaryPanel = new JPanel(new BorderLayout(4, 4));
+        importSummaryPanel.add(new JLabel("Unique imported libraries/symbols from binaries (answer: does it load something weird?)."), BorderLayout.NORTH);
+        importSummaryPanel.add(new JScrollPane(importSummaryList), BorderLayout.CENTER);
+        resultsTabs.addTab("Import summary", importSummaryPanel);
+
+        // Packed/entropy (high-entropy files — what to unpack or skip)
+        this.packedEntropyModel = new DefaultTableModel(new String[] { "Path", "Entropy" }, 0);
+        this.packedEntropyTable = new JTable(packedEntropyModel);
+        packedEntropyTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        packedEntropyTable.setAutoCreateRowSorter(true);
+        JPanel packedEntropyPanel = new JPanel(new BorderLayout(4, 4));
+        packedEntropyPanel.add(new JLabel("High-entropy files (likely packed/compressed); consider unpacking or skipping for static analysis."), BorderLayout.NORTH);
+        packedEntropyPanel.add(new JScrollPane(packedEntropyTable), BorderLayout.CENTER);
+        resultsTabs.addTab("Packed/entropy", packedEntropyPanel);
+
+        // Non-HTTP refs (ws://, wss://, raw ports — use Burp for WebSocket)
+        this.nonHttpRefsModel = new DefaultTableModel(new String[] { "File", "Ref", "Tag" }, 0);
+        this.nonHttpRefsTable = new JTable(nonHttpRefsModel);
+        nonHttpRefsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        nonHttpRefsTable.setAutoCreateRowSorter(true);
+        JPanel nonHttpRefsPanel = new JPanel(new BorderLayout(4, 4));
+        nonHttpRefsPanel.add(new JLabel("Non-HTTP refs (ws://, wss://, raw ports). Use Burp listener + proxy for WebSocket/non-HTTP where applicable."), BorderLayout.NORTH);
+        nonHttpRefsPanel.add(new JScrollPane(nonHttpRefsTable), BorderLayout.CENTER);
+        resultsTabs.addTab("Non-HTTP refs", nonHttpRefsPanel);
 
         // Extracted refs — master/detail: file list (short names) | path + refs list
         this.extractedRefsPathField = new JTextField();
@@ -787,13 +889,21 @@ public class UnveilTab {
         JPanel checklistToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         checklistToolbar.add(new JLabel("Filter:"));
         checklistToolbar.add(checklistFilterField);
+        this.checklistTlsPinningOnlyCheck = new JCheckBox("TLS/Pinning only", false);
+        checklistTlsPinningOnlyCheck.setToolTipText("Show only cert_pinning, ats_insecure_exception, insecure_cleartext");
+        checklistTlsPinningOnlyCheck.addActionListener(e -> applyChecklistFilter());
+        checklistToolbar.add(checklistTlsPinningOnlyCheck);
+        JButton copyEvidenceBtn = new JButton("Copy evidence");
+        copyEvidenceBtn.setToolTipText("Copy Path and Snippet of selected row for report evidence");
+        copyEvidenceBtn.addActionListener(e -> copyChecklistEvidence());
+        checklistToolbar.add(copyEvidenceBtn);
         checklistPanel.add(checklistToolbar, BorderLayout.NORTH);
         checklistPanel.add(new JScrollPane(checklistTable), BorderLayout.CENTER);
         resultsTabs.addTab("Checklist", checklistPanel);
 
         // Attack graph: visual chains + sendable URLs (one-click Send to Repeater)
         this.attackGraphChainsModel = new DefaultTableModel(
-            new String[] { "Vulnerable component", "Hunt targets", "Reason", "Matched paths" }, 0);
+            new String[] { "Vulnerable component", "Hunt targets", "Reason", "Matched paths", "Confidence" }, 0);
         this.sendableUrlsModel = new DefaultTableModel(new String[] { "URL", "Source", "Label" }, 0);
         this.sendableUrlsTable = new JTable(sendableUrlsModel);
         sendableUrlsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
@@ -1024,7 +1134,7 @@ public class UnveilTab {
         advancedTab.add(limitsPanel);
         advancedTab.add(baselinePanel);
         advancedTab.add(unveilPathPanel);
-        advancedTab.add(proxyCertPanel);
+        advancedTab.add(proxyWrap);
 
         JTabbedPane controlsTabs = new JTabbedPane();
         controlsTabs.addTab("Scan", scanTab);
@@ -1293,6 +1403,12 @@ public class UnveilTab {
         sendableUrlsModel.setRowCount(0);
         liveSlots.clear();
         liveSlotsListModel.clear();
+        if (updateRefsModel != null) updateRefsModel.setRowCount(0);
+        if (credentialHintsModel != null) credentialHintsModel.setRowCount(0);
+        if (dbSummaryModel != null) dbSummaryModel.setRowCount(0);
+        if (importSummaryListModel != null) importSummaryListModel.clear();
+        if (packedEntropyModel != null) packedEntropyModel.setRowCount(0);
+        if (nonHttpRefsModel != null) nonHttpRefsModel.setRowCount(0);
         liveSlotsSelectedIndex = -1;
         liveRequestArea.setText("");
         liveResponseArea.setText("");
@@ -1551,7 +1667,11 @@ public class UnveilTab {
         return getUnveilPath();
     }
 
-    private List<String> buildUnveilArgs(String target, String jsonPath, String htmlPath) {
+    /**
+     * Build CLI argument list for unveil. Pass null for any output path you don't need.
+     * SARIF export uses this so limits/baseline/options are consistent with scan.
+     */
+    private List<String> buildUnveilArgs(String target, String jsonPath, String htmlPath, String sarifPath) {
         List<String> args = new ArrayList<>();
         args.add(resolveUnveilPath());
         args.add("-C");
@@ -1593,7 +1713,15 @@ public class UnveilTab {
             args.add("-xh");
             args.add(htmlPath);
         }
+        if (sarifPath != null && !sarifPath.isEmpty()) {
+            args.add("-xs");
+            args.add(sarifPath);
+        }
         return args;
+    }
+
+    private List<String> buildUnveilArgs(String target, String jsonPath, String htmlPath) {
+        return buildUnveilArgs(target, jsonPath, htmlPath, null);
     }
 
     private void runUnveil(String target) {
@@ -1787,6 +1915,22 @@ public class UnveilTab {
                         summary.append("\nAttack graph chains: ").append(chains != null ? chains.size() : 0).append("\n");
                     }
                 }
+                if (report.has("suggested_order")) {
+                    JsonArray so = report.getAsJsonArray("suggested_order");
+                    if (so != null && so.size() > 0) {
+                        summary.append("\nSuggested order (test first):\n");
+                        int max = Math.min(so.size(), 15);
+                        for (int i = 0; i < max; i++) {
+                            JsonElement el = so.get(i);
+                            String title = "";
+                            if (el.isJsonObject() && el.getAsJsonObject().has("Title"))
+                                title = el.getAsJsonObject().get("Title").getAsString();
+                            if (title == null) title = "";
+                            summary.append("  ").append(i + 1).append(". ").append(title).append("\n");
+                        }
+                        if (so.size() > 15) summary.append("  … and ").append(so.size() - 15).append(" more.\n");
+                    }
+                }
             }
             if (report.has("chainability")) {
                 JsonArray ca = report.getAsJsonArray("chainability");
@@ -1845,6 +1989,36 @@ public class UnveilTab {
             if (report.has("paths_to_watch")) {
                 JsonArray pw = report.getAsJsonArray("paths_to_watch");
                 summary.append("Paths to watch: ").append(pw != null ? pw.size() : 0).append("\n");
+            }
+            if (report.has("tls_pinning_hints")) {
+                JsonArray tph = report.getAsJsonArray("tls_pinning_hints");
+                summary.append("TLS/Pinning hints: ").append(tph != null ? tph.size() : 0).append("\n");
+            }
+            if (report.has("update_refs")) {
+                JsonArray ur = report.getAsJsonArray("update_refs");
+                summary.append("Update/installer refs: ").append(ur != null ? ur.size() : 0).append("\n");
+            }
+            if (report.has("credential_hints")) {
+                JsonArray ch = report.getAsJsonArray("credential_hints");
+                summary.append("Credential/storage hints: ").append(ch != null ? ch.size() : 0).append("\n");
+            }
+            if (report.has("db_summary")) {
+                JsonArray ds = report.getAsJsonArray("db_summary");
+                summary.append("DB summary: ").append(ds != null ? ds.size() : 0).append(" DB(s)\n");
+            }
+            if (report.has("apk_manifest")) {
+                JsonObject am = report.getAsJsonObject("apk_manifest");
+                if (am != null && am.size() > 0) {
+                    summary.append("\nAPK manifest\n");
+                    if (am.has("package")) summary.append("  package: ").append(str(am.get("package"))).append("\n");
+                    if (am.has("debuggable") && am.get("debuggable").getAsBoolean()) summary.append("  debuggable: true\n");
+                    if (am.has("dangerous_or_sensitive_permissions")) {
+                        JsonArray perms = am.getAsJsonArray("dangerous_or_sensitive_permissions");
+                        if (perms != null && perms.size() > 0)
+                            summary.append("  dangerous/sensitive permissions: ").append(perms.size()).append("\n");
+                    }
+                    if (am.has("note") && !str(am.get("note")).isEmpty()) summary.append("  note: ").append(str(am.get("note"))).append("\n");
+                }
             }
             if (report.has("import_summary")) {
                 JsonObject im = report.getAsJsonObject("import_summary");
@@ -2126,6 +2300,116 @@ public class UnveilTab {
                     }
                 }
             }
+            updateRefsModel.setRowCount(0);
+            if (report.has("update_refs")) {
+                JsonArray ur = report.getAsJsonArray("update_refs");
+                if (ur != null) {
+                    for (JsonElement el : ur) {
+                        if (el.isJsonObject()) {
+                            JsonObject o = el.getAsJsonObject();
+                            String tagsStr = "";
+                            if (o.has("tags") && o.get("tags").isJsonArray()) {
+                                JsonArray tags = o.getAsJsonArray("tags");
+                                List<String> t = new ArrayList<>();
+                                for (JsonElement te : tags) {
+                                    if (te.isJsonPrimitive()) t.add(te.getAsString());
+                                }
+                                tagsStr = String.join(", ", t);
+                            }
+                            updateRefsModel.addRow(new Object[] {
+                                str(o.get("file")),
+                                str(o.get("ref")),
+                                tagsStr
+                            });
+                        }
+                    }
+                }
+            }
+            credentialHintsModel.setRowCount(0);
+            if (report.has("credential_hints")) {
+                JsonArray ch = report.getAsJsonArray("credential_hints");
+                if (ch != null) {
+                    for (JsonElement el : ch) {
+                        if (el.isJsonObject()) {
+                            JsonObject o = el.getAsJsonObject();
+                            credentialHintsModel.addRow(new Object[] {
+                                str(o.get("hint")),
+                                str(o.get("path")),
+                                str(o.get("suggestion"))
+                            });
+                        }
+                    }
+                }
+            }
+            dbSummaryModel.setRowCount(0);
+            if (report.has("db_summary")) {
+                JsonArray ds = report.getAsJsonArray("db_summary");
+                if (ds != null) {
+                    for (JsonElement el : ds) {
+                        if (el.isJsonObject()) {
+                            JsonObject o = el.getAsJsonObject();
+                            JsonArray tables = o.has("tables") && o.get("tables").isJsonArray() ? o.getAsJsonArray("tables") : null;
+                            String tablesStr = "";
+                            if (tables != null) {
+                                List<String> t = new ArrayList<>();
+                                for (JsonElement te : tables) {
+                                    if (te.isJsonPrimitive()) t.add(te.getAsString());
+                                }
+                                tablesStr = String.join(", ", t);
+                            }
+                            dbSummaryModel.addRow(new Object[] {
+                                str(o.get("path")),
+                                tablesStr,
+                                str(o.get("possible_credentials_hint"))
+                            });
+                        }
+                    }
+                }
+            }
+            importSummaryListModel.clear();
+            if (report.has("import_summary")) {
+                JsonObject im = report.getAsJsonObject("import_summary");
+                if (im != null && im.has("libraries")) {
+                    JsonArray libs = im.getAsJsonArray("libraries");
+                    if (libs != null) {
+                        for (JsonElement el : libs) {
+                            if (el.isJsonPrimitive())
+                                importSummaryListModel.addElement(el.getAsString());
+                        }
+                    }
+                }
+            }
+            packedEntropyModel.setRowCount(0);
+            if (report.has("packed_entropy")) {
+                JsonArray pe = report.getAsJsonArray("packed_entropy");
+                if (pe != null) {
+                    for (JsonElement el : pe) {
+                        if (el.isJsonObject()) {
+                            JsonObject o = el.getAsJsonObject();
+                            packedEntropyModel.addRow(new Object[] {
+                                str(o.get("path")),
+                                str(o.get("entropy"))
+                            });
+                        }
+                    }
+                }
+            }
+            nonHttpRefsModel.setRowCount(0);
+            if (report.has("non_http_refs")) {
+                JsonArray nhr = report.getAsJsonArray("non_http_refs");
+                if (nhr != null) {
+                    for (JsonElement el : nhr) {
+                        if (el.isJsonObject()) {
+                            JsonObject o = el.getAsJsonObject();
+                            nonHttpRefsModel.addRow(new Object[] {
+                                str(o.get("file")),
+                                str(o.get("ref")),
+                                str(o.get("tag"))
+                            });
+                        }
+                    }
+                }
+            }
             checklistModel.setRowCount(0);
             if (report.has("checklist_findings")) {
                 JsonArray cf = report.getAsJsonArray("checklist_findings");
@@ -2145,6 +2429,7 @@ public class UnveilTab {
                 }
             }
         checklistFilterField.setText("");
+        if (checklistTlsPinningOnlyCheck != null) checklistTlsPinningOnlyCheck.setSelected(false);
         applyChecklistFilter();
         chainabilityFilterField.setText("");
         chainabilityScopeFilter.setSelectedIndex(0);
@@ -2180,11 +2465,14 @@ public class UnveilTab {
                                     String componentLabel = str(row.get("component_label"));
                                     if (componentLabel == null || componentLabel.isEmpty()) componentLabel = str(row.get("suggested_surface"));
                                     if (componentLabel == null || componentLabel.isEmpty()) componentLabel = str(row.get("missing_role_label"));
+                                    String confidence = str(row.get("confidence"));
+                                    if (confidence == null || confidence.isEmpty()) confidence = "—";
                                     attackGraphChainsModel.addRow(new Object[] {
                                         componentLabel,
                                         str(row.get("hunt_targets")),
                                         str(row.get("reason")),
-                                        matchedPaths
+                                        matchedPaths,
+                                        confidence
                                     });
                                     List<PoCPayloadEntry> payloads = new ArrayList<>();
                                     if (row.has("suggested_payloads") && row.get("suggested_payloads").isJsonArray()) {
@@ -2626,17 +2914,40 @@ public class UnveilTab {
         }
     }
 
+    private void copyChecklistEvidence() {
+        int viewRow = checklistTable.getSelectedRow();
+        if (viewRow < 0) {
+            statusLabel.setText("Select a checklist row first.");
+            return;
+        }
+        int modelRow = checklistTable.convertRowIndexToModel(viewRow);
+        Object pathObj = checklistModel.getValueAt(modelRow, 0);
+        Object snippetObj = checklistModel.getValueAt(modelRow, 2);
+        String path = pathObj != null ? pathObj.toString() : "";
+        String snippet = snippetObj != null ? snippetObj.toString() : "";
+        String evidence = "Path: " + path + "\nSnippet: " + snippet;
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(evidence), null);
+        statusLabel.setText("Evidence copied (path + snippet).");
+    }
+
     private void applyChecklistFilter() {
         TableRowSorter<?> sorter = (TableRowSorter<?>) checklistTable.getRowSorter();
         if (sorter == null) return;
         String q = checklistFilterField.getText();
         if (q == null) q = "";
         q = q.trim();
-        if (q.isEmpty()) {
+        java.util.List<RowFilter<Object, Object>> filters = new ArrayList<>();
+        if (!q.isEmpty()) {
+            String search = "(?i)" + java.util.regex.Pattern.quote(q);
+            filters.add(RowFilter.regexFilter(search, 0, 1, 2));
+        }
+        if (checklistTlsPinningOnlyCheck != null && checklistTlsPinningOnlyCheck.isSelected()) {
+            filters.add(RowFilter.regexFilter("(?i)cert_pinning|ats_insecure_exception|insecure_cleartext", 1));
+        }
+        if (filters.isEmpty()) {
             sorter.setRowFilter(null);
         } else {
-            String search = "(?i)" + java.util.regex.Pattern.quote(q);
-            sorter.setRowFilter(RowFilter.regexFilter(search, 0, 1, 2));
+            sorter.setRowFilter(RowFilter.andFilter(filters));
         }
     }
 
@@ -2832,6 +3143,63 @@ public class UnveilTab {
         statusLabel.setText("Proxy URL copied.");
     }
 
+    private void copyLaunchCommand() {
+        String hp = proxyHostPortField.getText();
+        if (hp == null) hp = "";
+        hp = hp.trim();
+        if (hp.isEmpty()) hp = "127.0.0.1:8080";
+        String url = "http://" + hp;
+        String target = targetField.getText() != null ? targetField.getText().trim() : "";
+        StringBuilder sb = new StringBuilder();
+        sb.append("export HTTP_PROXY=").append(url).append("\n");
+        sb.append("export HTTPS_PROXY=").append(url).append("\n");
+        sb.append("export http_proxy=").append(url).append("\n");
+        sb.append("export https_proxy=").append(url).append("\n");
+        if (!target.isEmpty()) {
+            sb.append("# Then run your app:\n");
+            sb.append("#   macOS: open \"").append(target).append("\"\n");
+            sb.append("#   Windows: start \"\" \"").append(target).append("\"\n");
+        }
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(sb.toString()), null);
+        statusLabel.setText("Launch command copied (proxy + run hint).");
+    }
+
+    private void copyPathsToWatchForProcMon() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("# ProcMon: add as path include filter (Path contains), one per line\n");
+        for (int i = 0; i < pathsToWatchModel.getSize(); i++) {
+            sb.append(pathsToWatchModel.getElementAt(i)).append("\n");
+        }
+        if (pathsToWatchModel.getSize() > 0) {
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(sb.toString().trim()), null);
+            statusLabel.setText("ProcMon filter paths copied.");
+        } else statusLabel.setText("No paths to watch.");
+    }
+
+    private void copyPathsToWatchFsUsage() {
+        int n = pathsToWatchModel.getSize();
+        if (n == 0) {
+            statusLabel.setText("No paths to watch.");
+            return;
+        }
+        int max = Math.min(50, n);
+        StringBuilder sb = new StringBuilder();
+        sb.append("fs_usage -f path");
+        for (int i = 0; i < max; i++) {
+            String p = pathsToWatchModel.getElementAt(i);
+            if (p != null && !p.isEmpty()) {
+                if (p.indexOf(' ') >= 0 || p.indexOf("'") >= 0) {
+                    sb.append(" '").append(p.replace("'", "'\"'\"'")).append("'");
+                } else {
+                    sb.append(" ").append(p);
+                }
+            }
+        }
+        if (n > max) sb.append("\n# ... and ").append(n - max).append(" more (use Copy all paths for full list)");
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(sb.toString()), null);
+        statusLabel.setText("fs_usage one-liner copied.");
+    }
+
     private void copyCaCertInstructions() {
         String instructions =
             "Burp CA certificate (for thick client TLS interception):\n\n"
@@ -2941,15 +3309,7 @@ public class UnveilTab {
         String outPath = f.getAbsolutePath();
         executor.submit(() -> {
             try {
-                List<String> args = new ArrayList<>();
-                args.add(resolveUnveilPath());
-                args.add("-C"); args.add(target);
-                args.add("-q"); args.add("-xs"); args.add(outPath);
-                if (optExtended.isSelected()) args.add("-e");
-                if (optOffensive.isSelected()) args.add("-O");
-                if (optForce.isSelected()) args.add("-f");
-                if (optCve.isSelected()) args.add("--cve");
-                if (optCveLookup.isSelected()) args.add("--cve-lookup");
+                List<String> args = buildUnveilArgs(target, null, null, outPath);
                 ProcessBuilder pb = new ProcessBuilder(args);
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
@@ -2967,6 +3327,161 @@ public class UnveilTab {
                 });
             }
         });
+    }
+
+    /** Export unified findings table from current report JSON to CSV or Markdown. */
+    private void exportFindings(boolean asMd) {
+        String jsonText = rawJsonArea.getText();
+        if (jsonText == null || jsonText.trim().isEmpty()) {
+            statusLabel.setText("No report loaded. Run a scan first.");
+            return;
+        }
+        List<String[]> rows;
+        try {
+            JsonObject report = JsonParser.parseString(jsonText).getAsJsonObject();
+            rows = buildFindingsRowsFromReport(report);
+        } catch (Exception e) {
+            logging.logToError("Export findings parse error: " + e.getMessage());
+            statusLabel.setText("Invalid report JSON.");
+            return;
+        }
+        if (rows.isEmpty()) {
+            statusLabel.setText("No findings to export.");
+            return;
+        }
+        JFileChooser chooser = new JFileChooser();
+        chooser.setSelectedFile(new File(asMd ? "unveil-findings.md" : "unveil-findings.csv"));
+        if (chooser.showSaveDialog(mainPanel) != JFileChooser.APPROVE_OPTION) return;
+        File f = chooser.getSelectedFile();
+        if (f == null) return;
+        try {
+            String[] headers = new String[] { "Title", "Severity", "Category", "Path", "Snippet", "CWE", "Recommendation", "Source" };
+            if (asMd) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("| Title | Severity | Category | Path | Snippet | CWE | Recommendation |\n");
+                sb.append("|-------|----------|----------|------|---------|-----|-----------------|\n");
+                for (String[] row : rows) {
+                    String t = escapeMd((row.length > 0 ? row[0] : "").substring(0, Math.min(60, (row.length > 0 ? row[0] : "").length())));
+                    String sev = row.length > 1 ? row[1] : "";
+                    String cat = escapeMd((row.length > 2 ? row[2] : "").substring(0, Math.min(20, (row.length > 2 ? row[2] : "").length())));
+                    String path = escapeMd((row.length > 3 ? row[3] : "").substring(0, Math.min(50, (row.length > 3 ? row[3] : "").length())));
+                    String snip = escapeMd((row.length > 4 ? row[4] : "").replace("\n", " ").substring(0, Math.min(80, (row.length > 4 ? row[4] : "").length())));
+                    String cwe = row.length > 5 ? row[5] : "";
+                    String rec = escapeMd((row.length > 6 ? row[6] : "").replace("\n", " ").substring(0, Math.min(80, (row.length > 6 ? row[6] : "").length())));
+                    sb.append("| ").append(t).append(" | ").append(sev).append(" | ").append(cat).append(" | ").append(path).append(" | ").append(snip).append(" | ").append(cwe).append(" | ").append(rec).append(" |\n");
+                }
+                Files.write(f.toPath(), sb.toString().getBytes(StandardCharsets.UTF_8));
+            } else {
+                StringBuilder sb = new StringBuilder();
+                sb.append(String.join(",", headers)).append("\n");
+                for (String[] row : rows) {
+                    List<String> cells = new ArrayList<>();
+                    for (int i = 0; i < headers.length; i++) {
+                        String cell = (i < row.length && row[i] != null) ? row[i] : "";
+                        cells.add(escapeCsv(cell));
+                    }
+                    sb.append(String.join(",", cells)).append("\n");
+                }
+                Files.write(f.toPath(), sb.toString().getBytes(StandardCharsets.UTF_8));
+            }
+            statusLabel.setText("Findings exported: " + f.getAbsolutePath());
+        } catch (IOException e) {
+            logging.logToError("Export findings write error: " + e.getMessage());
+            statusLabel.setText("Write failed.");
+        }
+    }
+
+    private static String escapeCsv(String s) {
+        if (s == null) return "\"\"";
+        if (s.contains("\"") || s.contains(",") || s.contains("\n") || s.contains("\r")) {
+            return "\"" + s.replace("\"", "\"\"") + "\"";
+        }
+        return s;
+    }
+
+    private static String escapeMd(String s) {
+        if (s == null) return "";
+        return s.replace("|", "\\|");
+    }
+
+    /** Build findings rows from report: use suggested_order if present, else checklist + thick_client + chains. */
+    private List<String[]> buildFindingsRowsFromReport(JsonObject report) {
+        List<String[]> out = new ArrayList<>();
+        String[] cols = new String[] { "Title", "Severity", "Category", "Path", "Snippet", "CWE", "Recommendation", "Source" };
+        if (report.has("suggested_order")) {
+            JsonArray so = report.getAsJsonArray("suggested_order");
+            if (so != null) {
+                for (JsonElement el : so) {
+                    if (el.isJsonObject()) {
+                        JsonObject row = el.getAsJsonObject();
+                        out.add(new String[] {
+                            str(row.get("Title")), str(row.get("Severity")), str(row.get("Category")),
+                            str(row.get("Path")), str(row.get("Snippet")), str(row.get("CWE")),
+                            str(row.get("Recommendation")), str(row.get("Source"))
+                        });
+                    }
+                }
+                if (!out.isEmpty()) return out;
+            }
+        }
+        if (report.has("checklist_findings")) {
+            JsonArray cf = report.getAsJsonArray("checklist_findings");
+            if (cf != null) {
+                for (JsonElement el : cf) {
+                    if (el.isJsonObject()) {
+                        JsonObject c = el.getAsJsonObject();
+                        out.add(new String[] {
+                            "Checklist: " + str(c.get("pattern")), str(c.get("severity")), "Checklist",
+                            str(c.get("file")), str(c.get("snippet")), "", "Verify in config; remove or restrict if in production.", "checklist"
+                        });
+                    }
+                }
+            }
+        }
+        if (report.has("thick_client_findings")) {
+            JsonArray tcf = report.getAsJsonArray("thick_client_findings");
+            if (tcf != null) {
+                for (JsonElement el : tcf) {
+                    if (el.isJsonObject()) {
+                        JsonObject t = el.getAsJsonObject();
+                        JsonArray arts = t.has("artifacts") ? t.getAsJsonArray("artifacts") : null;
+                        String path = (arts != null && arts.size() > 0 && arts.get(0).isJsonPrimitive()) ? arts.get(0).getAsString() : "";
+                        String sum = str(t.get("summary"));
+                        out.add(new String[] {
+                            str(t.get("title")), str(t.get("severity")), str(t.get("category")),
+                            path, sum.length() > 400 ? sum.substring(0, 400) : sum,
+                            "", str(t.get("hunt_suggestion")), "thick_client"
+                        });
+                    }
+                }
+            }
+        }
+        if (report.has("attack_graph")) {
+            JsonObject ag = report.getAsJsonObject("attack_graph");
+            if (ag != null && ag.has("chains")) {
+                JsonArray chains = ag.getAsJsonArray("chains");
+                if (chains != null) {
+                    for (JsonElement el : chains) {
+                        if (el.isJsonObject()) {
+                            JsonObject ch = el.getAsJsonObject();
+                            if (!ch.has("matched_paths") || !ch.get("matched_paths").isJsonArray() || ch.getAsJsonArray("matched_paths").size() == 0) continue;
+                            String role = str(ch.get("missing_role_label"));
+                            if (role == null || role.isEmpty()) role = str(ch.get("missing_role"));
+                            String surface = str(ch.get("component_label"));
+                            if (surface == null || surface.isEmpty()) surface = str(ch.get("suggested_surface"));
+                            JsonArray mp = ch.getAsJsonArray("matched_paths");
+                            String path = (mp.size() > 0 && mp.get(0).isJsonPrimitive()) ? mp.get(0).getAsString() : "";
+                            out.add(new String[] {
+                                "Chain: " + role + " — " + surface, "High", "Attack graph", path,
+                                mp.size() + " path(s) matched. Hunt: " + str(ch.get("hunt_targets")),
+                                "", str(ch.get("reason")), "attack_graph"
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     private void exportHtml() {

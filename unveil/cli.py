@@ -9,7 +9,7 @@ try:
     from importlib.metadata import version as _pkg_version
     VERSION = _pkg_version("unveil")
 except Exception:
-    VERSION = "0.10.2"
+    VERSION = "0.10.3"
 
 BANNER = Path(__file__).resolve().parent / "assets" / "banner.txt"
 
@@ -66,6 +66,9 @@ def main():
     p.add_argument("-xs", metavar="FILE",
                    help="Export SARIF 2.1 report to FILE (for CI/IDE)")
 
+    p.add_argument("-xf", "--export-findings", metavar="FILE",
+                   help="Export unified findings table to CSV or Markdown (.md). Use after scan for client deliverables.")
+
     p.add_argument("--baseline", metavar="FILE",
                    help="Baseline report JSON; add diff and baseline_suppressed to output")
 
@@ -90,6 +93,7 @@ def main():
             max_size_mb=args.max_size_mb,
             max_per_type=args.max_per_type,
             cve_lookup=getattr(args, "cve_lookup", False),
+            force=getattr(args, "f", False),
         )
     except Exception as e:
         err = str(e) or type(e).__name__
@@ -109,8 +113,8 @@ def main():
             baseline = json.loads(Path(args.baseline).read_text())
             from unveil.report_diff import apply_baseline
             report = apply_baseline(report, baseline)
-        except Exception:
-            pass
+        except Exception as e:
+            sys.stderr.write(f"Unveil: baseline apply failed: {e}\n")
 
     if getattr(args, "cve", False):
         report["possible_cves"] = (report.get("verdict") or {}).get("hunt_queries") or []
@@ -133,6 +137,20 @@ def main():
     if getattr(args, "xs", None):
         from unveil.sarif_export import write_sarif
         write_sarif(report, args.xs)
+
+    if getattr(args, "export_findings", None):
+        from unveil.findings_export import build_findings_table, export_findings_csv, export_findings_md
+        path = Path(args.export_findings)
+        rows = build_findings_table(report)
+        parent = path.resolve().parent
+        if parent != path.resolve():
+            parent.mkdir(parents=True, exist_ok=True)
+        if path.suffix.lower() == ".md":
+            path.write_text(export_findings_md(rows), encoding="utf-8")
+        else:
+            export_findings_csv(rows, str(path))
+        if not args.quiet:
+            sys.stderr.write(f"Unveil: findings table written to {path}\n")
 
 if __name__ == "__main__":
     main()
