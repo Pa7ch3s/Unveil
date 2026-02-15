@@ -45,10 +45,10 @@ Models: execution surfaces, trust boundaries, persistence anchors, and lateral b
 
 ---
 
-## Features (v0.10.3)
+## Features (v0.10.4)
 
-* **v0.10.3** — Senior audit P0–P3: findings export (-xf), suggested order, TLS/update/credential/DB/APK manifest; Burp tabs and one-liners (launch, ProcMon, fs_usage). CLI 0.10.3, Burp 0.7.4.
-* **v0.7.4** (Burp) — Export findings CSV/MD, Copy evidence, Suggested order, Confidence, Update refs / Credential hints / DB summary / Import summary / Packed entropy / Non-HTTP refs; Copy launch command, ProcMon/fs_usage; proxy note.
+* **v0.10.4** — CLI 0.10.4, Burp 0.7.5. Consolidated Findings and Summary tabs with type dropdown; custom strings filter in Interesting strings.
+* **v0.7.5** (Burp) — Single Findings tab (Thick client / Permission / Cert / Dotnet / CVE) and Summary tab (Main / DB / Import / Packed) with dropdowns; custom strings filter.
 * **v0.10.1** — Version bump (CLI 0.10.1, Burp 0.7.1).
 * **v0.10.0** — Recon depth: import summary (unique libraries), packed/entropy list, non-HTTP refs (ws://, port); Electron preload/asar from package.json; attack graph chain order (role + matched_paths); cert key_bits/algorithm; .NET config hints (Type.GetType, remoting); CVE lookup uses Electron version; checklist ±context lines; Burp Summary (import/packed/non-HTTP) and Chainability confidence column.
 * **v0.9.0** — P0–P2 audit complete: interesting strings, ACL/permission audit, .NET assembly + dangerous API hints, cert parsing, CVE lookup (NVD), bulk Import from Proxy; instrumentation hints, custom checklist + severity, paths to watch; Burp tabs for all. CVE hunt queries in Summary (Burp); Chainability filters and context menu.
@@ -130,7 +130,7 @@ Unveil models a simple kill chain: get a foothold (ANCHOR), move laterally (BRID
 pipx install git+https://github.com/Pa7ch3s/Unveil.git
 ```
 
-**Burp Suite extension:** Add an **Unveil** tab inside Burp. **How to install:** (1) Download `unveil-burp-0.7.4.jar` from [Releases](https://github.com/Pa7ch3s/Unveil/releases), or build from source: `cd unveil-burp && ./gradlew jar`. (2) In Burp: **Extensions** → **Installed** → **Add** → **Extension type: Java** → select the JAR. (3) The **Unveil** tab appears in the main tab bar (if not visible, use **View** menu → **Unveil** or **Restore default tab layout**). See **[unveil-burp/](unveil-burp/)** for details.
+**Burp Suite extension:** Add an **Unveil** tab inside Burp. **How to install:** (1) Download `unveil-burp-0.7.5.jar` from [Releases](https://github.com/Pa7ch3s/Unveil/releases), or build from source: `cd unveil-burp && ./gradlew jar`. (2) In Burp: **Extensions** → **Installed** → **Add** → **Extension type: Java** → select the JAR. (3) The **Unveil** tab appears in the main tab bar (if not visible, use **View** menu → **Unveil** or **Restore default tab layout**). See **[unveil-burp/](unveil-burp/)** for details.
 
 **Upgrading from `unv`:** The CLI was renamed to `unveil`. If you still see `unv` or `unv-daemon` when you tab-complete:
 
@@ -171,7 +171,7 @@ Step-by-step commands with full syntax. Add screenshots where applicable.
 ```bash
 unveil --version
 ```
-Displays the installed version (e.g. `Unveil RADAR v0.10.3`).
+Displays the installed version (e.g. `Unveil RADAR v0.10.4`).
 
 ```bash
 unveil -h

@@ -9,7 +9,7 @@ try:
     from importlib.metadata import version as _pkg_version
     VERSION = _pkg_version("unveil")
 except Exception:
-    VERSION = "0.10.3"
+    VERSION = "0.10.4"
 
 BANNER = Path(__file__).resolve().parent / "assets" / "banner.txt"
 

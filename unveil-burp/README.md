@@ -4,13 +4,13 @@ Adds an **Unveil** tab to Burp Suite: scan apps/binaries for attack surfaces, se
 
 ## How to install (Burp)
 
-1. **Get the JAR** — Download `unveil-burp-0.7.4.jar` from [GitHub Releases](https://github.com/Pa7ch3s/Unveil/releases), or build from source: `cd unveil-burp && ./gradlew jar` (output: `build/libs/unveil-burp-0.7.4.jar`).
+1. **Get the JAR** — Download `unveil-burp-0.7.5.jar` from [GitHub Releases](https://github.com/Pa7ch3s/Unveil/releases), or build from source: `cd unveil-burp && ./gradlew jar` (output: `build/libs/unveil-burp-0.7.5.jar`).
 2. **Load in Burp** — Open Burp Suite (2023.8+). Go to **Extensions** → **Installed** → **Add** → **Extension type: Java** → select the JAR file.
 3. **Open the tab** — The **Unveil** tab appears in the main tab bar (same row as Dashboard, Target, Proxy). If you don't see it: **View** menu (top) → click **Unveil**, or **View** → **Restore default tab layout**.
 4. **Optional (CLI)** — If scan fails with "unveil not found", install the CLI (`pipx install git+https://github.com/Pa7ch3s/Unveil.git`) and set **Unveil executable (optional)** in the tab to the path from `which unveil`, or use **Use daemon** and start the daemon separately.
 
 
-## What’s in the tab (v0.7.4)
+## What’s in the tab (v0.7.5)
 
 - **Path** — Target to scan: directory, `.app`, `.exe`, `.dmg`, `.ipa`, `.apk`, `.jar`/`.war`, or file. **Browse…** to pick.
 - **Scan** — Runs the Unveil CLI (or **daemon** if enabled) with the path and options; results appear below.
@@ -51,13 +51,13 @@ cd unveil-burp
 ./gradlew jar
 ```
 
-The JAR is written to `build/libs/unveil-burp-0.7.4.jar`.
+The JAR is written to `build/libs/unveil-burp-0.7.5.jar`.
 
 ## Load in Burp
 
 1. Open Burp Suite (2023.8+ for Montoya API).
 2. **Extensions** → **Installed** → **Add** → **Extension type: Java**.
-3. Select `build/libs/unveil-burp-0.7.4.jar`.
+3. Select `build/libs/unveil-burp-0.7.5.jar`.
 4. The **Unveil** tab appears; if scan fails with “unveil not found”, set **Unveil executable (optional)** to the path from `which unveil`.
 
 ## Compressing the JSON output
@@ -67,7 +67,7 @@ The JAR is written to `build/libs/unveil-burp-0.7.4.jar`.
 - **Discovered HTML** — **View in panel** renders the selected HTML file inside Burp (avoids blank browser with file://); **Open in browser** still available.
 - **Raw JSON** remains available for tooling or archival; **Copy JSON** / **Save JSON…** / **Save compact JSON…** for sharing or CI.
 
-## Implemented (v0.7.4)
+## Implemented (v0.7.5)
 
 - **Persistent settings** — Java Preferences: unveil path, daemon URL, use daemon, option checkboxes, limits, baseline path (saved on successful scan).
 - **Daemon mode** — **Use daemon** + URL; `POST /scan` with JSON body (target, extended, offensive, max_files, max_size_mb, max_per_type). No CLI spawn.

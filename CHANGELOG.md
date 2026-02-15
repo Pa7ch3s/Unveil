@@ -4,6 +4,10 @@
 
 - (None.)
 
+## [0.10.4] / [0.7.5] — 2026-02-14
+
+- **Burp 0.7.5** — Consolidated Findings tab (Thick client / Permission / Cert / Dotnet / CVE lookup) with type dropdown; consolidated Summary tab (Main / DB summary / Import summary / Packed/entropy) with type dropdown; Interesting strings: custom strings filter (one per line, show only matching strings).
+
 ## [0.10.3] / [0.7.4] — 2026-02-14
 
 - **CLI 0.10.3** — Senior audit P0–P3: findings export (CSV/MD, -xf), suggested order, confidence on chains, TLS/pinning hints, update_refs, credential_hints, db_summary, apk_manifest; Copy evidence, Copy launch command, ProcMon/fs_usage; force (-f) passed to engine (reserved); final bugfixes (dedup key, DB URI, fs_usage quoting).

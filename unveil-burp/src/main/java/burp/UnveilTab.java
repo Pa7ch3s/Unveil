@@ -30,6 +30,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -56,6 +58,7 @@ public class UnveilTab {
     private final JCheckBox optCve;
     private final JCheckBox optCveLookup;
     private final JCheckBox useDaemonCheck;
+    private final JCheckBox optProxyBackend;
     private final JTextField daemonUrlField;
     private final JSpinner maxFilesSpinner;
     private final JSpinner maxSizeMbSpinner;
@@ -83,6 +86,13 @@ public class UnveilTab {
     private final DefaultTableModel interestingStringsModel;
     private final JTable interestingStringsTable;
     private final JScrollPane interestingStringsScroll;
+    private final JTextArea interestingStringsCustomFilterField;
+    private final JPanel summaryCardsPanel;
+    private final CardLayout summaryCardLayout;
+    private final JPanel discoveryCardsPanel;
+    private final CardLayout discoveryCardLayout;
+    private final JPanel findingsCardsPanel;
+    private final CardLayout findingsCardLayout;
     private final DefaultTableModel permissionFindingsModel;
     private final JTable permissionFindingsTable;
     private final JScrollPane permissionFindingsScroll;
@@ -347,6 +357,9 @@ public class UnveilTab {
         openSettingsBtn.setToolTipText("Open Burp Settings (Proxy listener is under Tools → Proxy → Options)");
         openSettingsBtn.addActionListener(e -> showProxySettingsHint());
         proxyCertPanel.add(openSettingsBtn);
+        this.optProxyBackend = new JCheckBox("Send backend traffic through proxy", false);
+        optProxyBackend.setToolTipText("When enabled, daemon requests and CLI outbound traffic (e.g. CVE lookup) go through Burp proxy so they appear in Proxy history.");
+        proxyCertPanel.add(optProxyBackend);
         JPanel proxyWrap = new JPanel(new BorderLayout(4, 4));
         proxyWrap.add(proxyCertPanel, BorderLayout.NORTH);
         JLabel nonHttpNote = new JLabel("Non-HTTP refs (ws://, wss://, raw ports) are in the report; use Burp for WebSocket/proxy where applicable.");
@@ -404,7 +417,16 @@ public class UnveilTab {
         JSplitPane summarySplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(summaryArea), cveQueriesPanel);
         summarySplit.setResizeWeight(0.6);
         summarySplit.setOneTouchExpandable(true);
-        resultsTabs.addTab("Summary", summarySplit);
+        this.summaryCardLayout = new CardLayout();
+        this.summaryCardsPanel = new JPanel(summaryCardLayout);
+        summaryCardsPanel.add(summarySplit, "Main");
+        JComboBox<String> summaryTypeCombo = new JComboBox<>(new String[] { "Main", "DB summary", "Import summary", "Packed/entropy" });
+        summaryTypeCombo.setToolTipText("Switch summary view");
+        summaryTypeCombo.addActionListener(e -> summaryCardLayout.show(summaryCardsPanel, (String) summaryTypeCombo.getSelectedItem()));
+        JPanel summaryWrapper = new JPanel(new BorderLayout(4, 4));
+        summaryWrapper.add(summaryTypeCombo, BorderLayout.NORTH);
+        summaryWrapper.add(summaryCardsPanel, BorderLayout.CENTER);
+        resultsTabs.addTab("Summary", summaryWrapper);
 
         JPanel discoveredHtmlPanel = new JPanel(new BorderLayout(4, 4));
         this.discoveredHtmlList = new JList<>(discoveredHtmlModel);
@@ -454,7 +476,6 @@ public class UnveilTab {
         exportListItem.addActionListener(e -> exportDiscoveredHtmlList());
         discoveredHtmlMenu.add(exportListItem);
         discoveredHtmlList.setComponentPopupMenu(discoveredHtmlMenu);
-        resultsTabs.addTab("Discovered HTML", discoveredHtmlPanel);
 
         // Discovered assets (all types: html, xml, json, config, script, plist, etc.)
         this.discoveredAssetsModel = new DefaultTableModel(new String[] { "Path", "Type" }, 0);
@@ -504,7 +525,6 @@ public class UnveilTab {
         exportAssetsItem.addActionListener(e -> exportDiscoveredAssetsList());
         discoveredAssetsMenu.add(exportAssetsItem);
         discoveredAssetsTable.setComponentPopupMenu(discoveredAssetsMenu);
-        resultsTabs.addTab("Discovered assets", discoveredAssetsPanel);
 
         // Chainability — file→ref links; filter, summary, tooltips, actions for testers
         this.chainabilityModel = new DefaultTableModel(new String[] { "File", "Ref", "In scope", "Matched type", "Confidence" }, 0);
@@ -583,7 +603,7 @@ public class UnveilTab {
         chainabilityPanel.add(chainabilityScroll, BorderLayout.CENTER);
         resultsTabs.addTab("Chainability", chainabilityPanel);
 
-        // Interesting strings (File | String)
+        // Interesting strings (File | String) + custom strings filter
         this.interestingStringsModel = new DefaultTableModel(new String[] { "File", "String" }, 0);
         this.interestingStringsTable = new JTable(interestingStringsModel);
         interestingStringsTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
@@ -592,10 +612,22 @@ public class UnveilTab {
         this.interestingStringsScroll = new JScrollPane(interestingStringsTable);
         interestingStringsScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         interestingStringsScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        this.interestingStringsCustomFilterField = new JTextArea(3, 40);
+        interestingStringsCustomFilterField.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        interestingStringsCustomFilterField.setLineWrap(true);
+        interestingStringsCustomFilterField.setToolTipText("One string per line. Show only rows whose String column contains any of these (case-insensitive). Leave empty to show all.");
+        interestingStringsCustomFilterField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { applyInterestingStringsCustomFilter(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { applyInterestingStringsCustomFilter(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { applyInterestingStringsCustomFilter(); }
+        });
+        JPanel interestingStringsNorth = new JPanel(new BorderLayout(4, 4));
+        interestingStringsNorth.add(new JLabel("Custom strings (one per line) — show only strings containing any of these:"), BorderLayout.NORTH);
+        interestingStringsNorth.add(new JScrollPane(interestingStringsCustomFilterField), BorderLayout.CENTER);
         JPanel interestingStringsPanel = new JPanel(new BorderLayout(4, 4));
         interestingStringsPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
+        interestingStringsPanel.add(interestingStringsNorth, BorderLayout.NORTH);
         interestingStringsPanel.add(interestingStringsScroll, BorderLayout.CENTER);
-        resultsTabs.addTab("Interesting strings", interestingStringsPanel);
 
         // Permission findings (Path | Finding | Detail)
         this.permissionFindingsModel = new DefaultTableModel(new String[] { "Path", "Finding", "Detail" }, 0);
@@ -608,7 +640,6 @@ public class UnveilTab {
         JPanel permissionFindingsPanel = new JPanel(new BorderLayout(4, 4));
         permissionFindingsPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
         permissionFindingsPanel.add(permissionFindingsScroll, BorderLayout.CENTER);
-        resultsTabs.addTab("Permission findings", permissionFindingsPanel);
 
         // Cert findings (Path | Subject | Expired | Self-signed)
         this.certFindingsModel = new DefaultTableModel(new String[] { "Path", "Subject", "Expired", "Self-signed" }, 0);
@@ -621,7 +652,6 @@ public class UnveilTab {
         JPanel certFindingsPanel = new JPanel(new BorderLayout(4, 4));
         certFindingsPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
         certFindingsPanel.add(certFindingsScroll, BorderLayout.CENTER);
-        resultsTabs.addTab("Cert findings", certFindingsPanel);
 
         // Dotnet findings (Path | Assembly | Version | Serialization ref | Hints)
         this.dotnetFindingsModel = new DefaultTableModel(
@@ -635,7 +665,6 @@ public class UnveilTab {
         JPanel dotnetFindingsPanel = new JPanel(new BorderLayout(4, 4));
         dotnetFindingsPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
         dotnetFindingsPanel.add(dotnetFindingsScroll, BorderLayout.CENTER);
-        resultsTabs.addTab("Dotnet findings", dotnetFindingsPanel);
 
         // CVE lookup (Query | CVE ID | Score | Published | Summary)
         this.cveLookupModel = new DefaultTableModel(
@@ -665,7 +694,6 @@ public class UnveilTab {
         JPanel cveLookupPanel = new JPanel(new BorderLayout(4, 4));
         cveLookupPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
         cveLookupPanel.add(cveLookupScroll, BorderLayout.CENTER);
-        resultsTabs.addTab("CVE lookup", cveLookupPanel);
 
         // Instrumentation hints (Surface | Component | Suggestion | Frida/script hint)
         this.instrumentationHintsModel = new DefaultTableModel(
@@ -715,7 +743,6 @@ public class UnveilTab {
         pathsToWatchNorth.add(pathsToWatchBtnRow, BorderLayout.SOUTH);
         pathsToWatchPanel.add(pathsToWatchNorth, BorderLayout.NORTH);
         pathsToWatchPanel.add(pathsToWatchScroll, BorderLayout.CENTER);
-        resultsTabs.addTab("Paths to watch", pathsToWatchPanel);
 
         // Update refs (update/installer URLs and paths from scan)
         this.updateRefsModel = new DefaultTableModel(new String[] { "File", "Ref", "Tags" }, 0);
@@ -727,7 +754,6 @@ public class UnveilTab {
         updateRefsNote.setForeground(Color.GRAY);
         updateRefsPanel.add(updateRefsNote, BorderLayout.NORTH);
         updateRefsPanel.add(new JScrollPane(updateRefsTable), BorderLayout.CENTER);
-        resultsTabs.addTab("Update refs", updateRefsPanel);
 
         // Credential/storage hints (Keychain, CredMan, DPAPI, safeStorage)
         this.credentialHintsModel = new DefaultTableModel(new String[] { "Hint", "Path", "Suggestion" }, 0);
@@ -737,7 +763,6 @@ public class UnveilTab {
         JPanel credentialHintsPanel = new JPanel(new BorderLayout(4, 4));
         credentialHintsPanel.add(new JLabel("Credential and storage hints inferred from imports/config (Keychain, CredMan, DPAPI, Electron safeStorage)."), BorderLayout.NORTH);
         credentialHintsPanel.add(new JScrollPane(credentialHintsTable), BorderLayout.CENTER);
-        resultsTabs.addTab("Credential hints", credentialHintsPanel);
 
         // DB summary (.db/.sqlite table names and possible credentials hint)
         this.dbSummaryModel = new DefaultTableModel(new String[] { "Path", "Tables", "Possible credentials hint" }, 0);
@@ -747,7 +772,7 @@ public class UnveilTab {
         JPanel dbSummaryPanel = new JPanel(new BorderLayout(4, 4));
         dbSummaryPanel.add(new JLabel("Discovered .db/.sqlite: table names and hint if name suggests credentials."), BorderLayout.NORTH);
         dbSummaryPanel.add(new JScrollPane(dbSummaryTable), BorderLayout.CENTER);
-        resultsTabs.addTab("DB summary", dbSummaryPanel);
+        summaryCardsPanel.add(dbSummaryPanel, "DB summary");
 
         // Import summary (unique DLLs/symbols — "does it load something weird?")
         this.importSummaryList = new JList<>(importSummaryListModel);
@@ -755,7 +780,7 @@ public class UnveilTab {
         JPanel importSummaryPanel = new JPanel(new BorderLayout(4, 4));
         importSummaryPanel.add(new JLabel("Unique imported libraries/symbols from binaries (answer: does it load something weird?)."), BorderLayout.NORTH);
         importSummaryPanel.add(new JScrollPane(importSummaryList), BorderLayout.CENTER);
-        resultsTabs.addTab("Import summary", importSummaryPanel);
+        summaryCardsPanel.add(importSummaryPanel, "Import summary");
 
         // Packed/entropy (high-entropy files — what to unpack or skip)
         this.packedEntropyModel = new DefaultTableModel(new String[] { "Path", "Entropy" }, 0);
@@ -765,7 +790,7 @@ public class UnveilTab {
         JPanel packedEntropyPanel = new JPanel(new BorderLayout(4, 4));
         packedEntropyPanel.add(new JLabel("High-entropy files (likely packed/compressed); consider unpacking or skipping for static analysis."), BorderLayout.NORTH);
         packedEntropyPanel.add(new JScrollPane(packedEntropyTable), BorderLayout.CENTER);
-        resultsTabs.addTab("Packed/entropy", packedEntropyPanel);
+        summaryCardsPanel.add(packedEntropyPanel, "Packed/entropy");
 
         // Non-HTTP refs (ws://, wss://, raw ports — use Burp for WebSocket)
         this.nonHttpRefsModel = new DefaultTableModel(new String[] { "File", "Ref", "Tag" }, 0);
@@ -775,7 +800,6 @@ public class UnveilTab {
         JPanel nonHttpRefsPanel = new JPanel(new BorderLayout(4, 4));
         nonHttpRefsPanel.add(new JLabel("Non-HTTP refs (ws://, wss://, raw ports). Use Burp listener + proxy for WebSocket/non-HTTP where applicable."), BorderLayout.NORTH);
         nonHttpRefsPanel.add(new JScrollPane(nonHttpRefsTable), BorderLayout.CENTER);
-        resultsTabs.addTab("Non-HTTP refs", nonHttpRefsPanel);
 
         // Extracted refs — master/detail: file list (short names) | path + refs list
         this.extractedRefsPathField = new JTextField();
@@ -871,7 +895,26 @@ public class UnveilTab {
         extractedRefsSplit.setDividerLocation(280);
         JPanel extractedRefsPanel = new JPanel(new BorderLayout());
         extractedRefsPanel.add(extractedRefsSplit, BorderLayout.CENTER);
-        resultsTabs.addTab("Extracted refs", extractedRefsPanel);
+
+        // Discovery tab: single tab with dropdown (Discovered HTML | Assets | Update refs | Credential hints | Non-HTTP refs | Extracted refs | Paths to watch | Interesting strings)
+        this.discoveryCardLayout = new CardLayout();
+        this.discoveryCardsPanel = new JPanel(discoveryCardLayout);
+        discoveryCardsPanel.add(discoveredHtmlPanel, "Discovered HTML");
+        discoveryCardsPanel.add(discoveredAssetsPanel, "Discovered assets");
+        discoveryCardsPanel.add(updateRefsPanel, "Update refs");
+        discoveryCardsPanel.add(credentialHintsPanel, "Credential hints");
+        discoveryCardsPanel.add(nonHttpRefsPanel, "Non-HTTP refs");
+        discoveryCardsPanel.add(extractedRefsPanel, "Extracted refs");
+        discoveryCardsPanel.add(pathsToWatchPanel, "Paths to watch");
+        discoveryCardsPanel.add(interestingStringsPanel, "Interesting strings");
+        String[] discoveryTypes = new String[] { "Discovered HTML", "Discovered assets", "Update refs", "Credential hints", "Non-HTTP refs", "Extracted refs", "Paths to watch", "Interesting strings" };
+        JComboBox<String> discoveryTypeCombo = new JComboBox<>(discoveryTypes);
+        discoveryTypeCombo.setToolTipText("Switch discovery view");
+        discoveryTypeCombo.addActionListener(e -> discoveryCardLayout.show(discoveryCardsPanel, (String) discoveryTypeCombo.getSelectedItem()));
+        JPanel discoveryWrapper = new JPanel(new BorderLayout(4, 4));
+        discoveryWrapper.add(discoveryTypeCombo, BorderLayout.NORTH);
+        discoveryWrapper.add(discoveryCardsPanel, BorderLayout.CENTER);
+        resultsTabs.insertTab("Discovery", null, discoveryWrapper, null, 1);
 
         // Checklist (potential secrets / static analysis no-nos)
         this.checklistModel = new DefaultTableModel(new String[] { "File", "Pattern", "Snippet", "Line", "Severity" }, 0);
@@ -970,7 +1013,24 @@ public class UnveilTab {
         tcfLabel.setFont(tcfLabel.getFont().deriveFont(11f));
         thickClientFindingsPanel.add(tcfLabel, BorderLayout.NORTH);
         thickClientFindingsPanel.add(new JScrollPane(thickClientFindingsTable), BorderLayout.CENTER);
-        resultsTabs.addTab("Thick client findings", thickClientFindingsPanel);
+
+        // Consolidated Findings tab (Thick client | Permission | Cert | Dotnet | CVE lookup)
+        this.findingsCardLayout = new CardLayout();
+        this.findingsCardsPanel = new JPanel(findingsCardLayout);
+        findingsCardsPanel.add(thickClientFindingsPanel, "Thick client findings");
+        findingsCardsPanel.add(permissionFindingsPanel, "Permission findings");
+        findingsCardsPanel.add(certFindingsPanel, "Cert findings");
+        findingsCardsPanel.add(dotnetFindingsPanel, "Dotnet findings");
+        findingsCardsPanel.add(cveLookupPanel, "CVE lookup");
+        JComboBox<String> findingsTypeCombo = new JComboBox<>(new String[] {
+            "Thick client findings", "Permission findings", "Cert findings", "Dotnet findings", "CVE lookup"
+        });
+        findingsTypeCombo.setToolTipText("Switch findings type");
+        findingsTypeCombo.addActionListener(e -> findingsCardLayout.show(findingsCardsPanel, (String) findingsTypeCombo.getSelectedItem()));
+        JPanel findingsWrapper = new JPanel(new BorderLayout(4, 4));
+        findingsWrapper.add(findingsTypeCombo, BorderLayout.NORTH);
+        findingsWrapper.add(findingsCardsPanel, BorderLayout.CENTER);
+        resultsTabs.addTab("Findings", findingsWrapper);
 
         // Payloads (HackBar-style): browse by category, copy payload
         this.payloadDetailArea = new JTextArea(8, 60);
@@ -1182,6 +1242,7 @@ public class UnveilTab {
             if (!baseline.isEmpty()) baselinePathField.setText(baseline);
             String proxyHostPort = prefs.get("proxyHostPort", "");
             if (!proxyHostPort.isEmpty()) proxyHostPortField.setText(proxyHostPort);
+            optProxyBackend.setSelected(prefs.getBoolean("optProxyBackend", false));
         } catch (Exception e) {
             logging.logToError("Load preferences: " + e.getMessage());
         }
@@ -1206,6 +1267,7 @@ public class UnveilTab {
             prefs.put("baselinePath", baseline != null ? baseline.trim() : "");
             String proxyHostPort = proxyHostPortField.getText();
             prefs.put("proxyHostPort", proxyHostPort != null ? proxyHostPort.trim() : "");
+            prefs.putBoolean("optProxyBackend", optProxyBackend.isSelected());
         } catch (Exception e) {
             logging.logToError("Save preferences: " + e.getMessage());
         }
@@ -1393,6 +1455,7 @@ public class UnveilTab {
         possibleCvesModel.clear();
         checklistModel.setRowCount(0);
         checklistFilterField.setText("");
+        if (interestingStringsCustomFilterField != null) interestingStringsCustomFilterField.setText("");
         thickClientFindingsModel.setRowCount(0);
         payloadLibraryModel.setRowCount(0);
         payloadLibraryFullData.clear();
@@ -1595,7 +1658,13 @@ public class UnveilTab {
         String base = urlStr.endsWith("/") ? urlStr : urlStr + "/";
         try {
             URL url = new URL(base + "scan");
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            HttpURLConnection conn;
+            if (optProxyBackend.isSelected()) {
+                Proxy proxy = parseProxyFromField();
+                conn = proxy != null ? (HttpURLConnection) url.openConnection(proxy) : (HttpURLConnection) url.openConnection();
+            } else {
+                conn = (HttpURLConnection) url.openConnection();
+            }
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Content-Type", "application/json");
             conn.setDoOutput(true);
@@ -1738,6 +1807,13 @@ public class UnveilTab {
         try {
             ProcessBuilder pb = new ProcessBuilder(args);
             pb.redirectErrorStream(true);
+            String proxyUrl = getProxyUrlForEnv();
+            if (proxyUrl != null) {
+                pb.environment().put("HTTP_PROXY", proxyUrl);
+                pb.environment().put("HTTPS_PROXY", proxyUrl);
+                pb.environment().put("http_proxy", proxyUrl);
+                pb.environment().put("https_proxy", proxyUrl);
+            }
             Process p = pb.start();
             p.getInputStream().readAllBytes();
             int exit = p.waitFor();
@@ -2930,6 +3006,29 @@ public class UnveilTab {
         statusLabel.setText("Evidence copied (path + snippet).");
     }
 
+    private void applyInterestingStringsCustomFilter() {
+        TableRowSorter<?> sorter = (TableRowSorter<?>) interestingStringsTable.getRowSorter();
+        if (sorter == null) return;
+        String text = interestingStringsCustomFilterField != null ? interestingStringsCustomFilterField.getText() : "";
+        if (text == null) text = "";
+        String[] lines = text.split("\\n");
+        java.util.List<String> terms = new ArrayList<>();
+        for (String line : lines) {
+            String t = line.trim();
+            if (!t.isEmpty()) terms.add(t.toLowerCase());
+        }
+        if (terms.isEmpty()) {
+            sorter.setRowFilter(null);
+            return;
+        }
+        StringBuilder regex = new StringBuilder("(?i)");
+        for (int i = 0; i < terms.size(); i++) {
+            if (i > 0) regex.append("|");
+            regex.append(".*").append(java.util.regex.Pattern.quote(terms.get(i))).append(".*");
+        }
+        sorter.setRowFilter(RowFilter.regexFilter(regex.toString(), 1));
+    }
+
     private void applyChecklistFilter() {
         TableRowSorter<?> sorter = (TableRowSorter<?>) checklistTable.getRowSorter();
         if (sorter == null) return;
@@ -3122,6 +3221,41 @@ public class UnveilTab {
         return "127.0.0.1:8080";
     }
 
+    /** Parse proxy host:port from field; return Proxy for use with URL.openConnection(proxy), or null if invalid. */
+    private Proxy parseProxyFromField() {
+        String hp = proxyHostPortField.getText();
+        if (hp == null) hp = "";
+        hp = hp.trim();
+        if (hp.isEmpty()) hp = "127.0.0.1:8080";
+        int colon = hp.lastIndexOf(':');
+        String host = colon > 0 ? hp.substring(0, colon).trim() : "127.0.0.1";
+        int port = 8080;
+        try {
+            port = Integer.parseInt(colon >= 0 ? hp.substring(colon + 1).trim() : hp);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        if (port <= 0 || port > 65535) return null;
+        return new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port));
+    }
+
+    /** Proxy URL for env (e.g. http://127.0.0.1:8080), or null if proxy backend disabled or invalid. */
+    private String getProxyUrlForEnv() {
+        if (!optProxyBackend.isSelected()) return null;
+        String hp = proxyHostPortField.getText();
+        if (hp == null) hp = "";
+        hp = hp.trim();
+        if (hp.isEmpty()) hp = "127.0.0.1:8080";
+        int colon = hp.lastIndexOf(':');
+        try {
+            int port = Integer.parseInt(colon >= 0 ? hp.substring(colon + 1).trim() : hp);
+            if (port <= 0 || port > 65535) return null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        return hp.startsWith("http://") || hp.startsWith("https://") ? hp : "http://" + hp;
+    }
+
     private void copyProxyEnv() {
         String hp = proxyHostPortField.getText();
         if (hp == null) hp = "";
@@ -3312,6 +3446,13 @@ public class UnveilTab {
                 List<String> args = buildUnveilArgs(target, null, null, outPath);
                 ProcessBuilder pb = new ProcessBuilder(args);
                 pb.redirectErrorStream(true);
+                String proxyUrl = getProxyUrlForEnv();
+                if (proxyUrl != null) {
+                    pb.environment().put("HTTP_PROXY", proxyUrl);
+                    pb.environment().put("HTTPS_PROXY", proxyUrl);
+                    pb.environment().put("http_proxy", proxyUrl);
+                    pb.environment().put("https_proxy", proxyUrl);
+                }
                 Process p = pb.start();
                 p.getInputStream().readAllBytes();
                 int exit = p.waitFor();
@@ -3505,6 +3646,13 @@ public class UnveilTab {
                 List<String> args = buildUnveilArgs(target, null, path);
                 ProcessBuilder pb = new ProcessBuilder(args);
                 pb.redirectErrorStream(true);
+                String proxyUrl = getProxyUrlForEnv();
+                if (proxyUrl != null) {
+                    pb.environment().put("HTTP_PROXY", proxyUrl);
+                    pb.environment().put("HTTPS_PROXY", proxyUrl);
+                    pb.environment().put("http_proxy", proxyUrl);
+                    pb.environment().put("https_proxy", proxyUrl);
+                }
                 Process p = pb.start();
                 p.getInputStream().readAllBytes();
                 int exit = p.waitFor();

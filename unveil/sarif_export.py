@@ -8,7 +8,7 @@ try:
     from importlib.metadata import version as _pkg_version
     _UNVEIL_VERSION = _pkg_version("unveil")
 except Exception:
-    _UNVEIL_VERSION = "0.10.3"
+    _UNVEIL_VERSION = "0.10.4"
 
 
 def report_to_sarif(report, run_uri=None):
