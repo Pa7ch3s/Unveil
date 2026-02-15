@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "unveil"
-version = "0.7.2"
+version = "0.7.3"
 
 repositories {
     mavenCentral()
@@ -34,6 +34,7 @@ tasks.jar {
     val runtimeJars = configurations.runtimeClasspath.get().filter { f: java.io.File -> !f.name.contains("montoya") }
     from(runtimeJars.map { zipTree(it) }) {
         exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
+        exclude("META-INF/services/*")
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }

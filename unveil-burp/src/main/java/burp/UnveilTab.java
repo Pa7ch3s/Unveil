@@ -2806,34 +2806,8 @@ public class UnveilTab {
     }
 
     private String detectProxyListener() {
-        try {
-            Object burpSuite = api.burpSuite();
-            if (burpSuite == null) return "127.0.0.1:8080";
-            java.lang.reflect.Method m = burpSuite.getClass().getMethod("exportProjectOptionsAsJson", String.class);
-            if (m == null) return "127.0.0.1:8080";
-            String json = (String) m.invoke(burpSuite, "proxy");
-            if (json != null && !json.isEmpty()) {
-                JsonObject root = JsonParser.parseString(json).getAsJsonObject();
-                JsonObject proxy = root.has("proxy") ? root.getAsJsonObject("proxy") : null;
-                if (proxy != null && proxy.has("request_listeners")) {
-                    JsonArray listeners = proxy.getAsJsonArray("request_listeners");
-                    if (listeners != null && listeners.size() > 0) {
-                        JsonObject first = listeners.get(0).getAsJsonObject();
-                        if (first.has("listener_port")) {
-                            int port = first.get("listener_port").getAsInt();
-                            String host = "127.0.0.1";
-                            if (first.has("listen_mode")) {
-                                String mode = first.get("listen_mode").getAsString();
-                                if (mode != null && mode.contains("all_interfaces")) host = "0.0.0.0";
-                            }
-                            return host + ":" + port;
-                        }
-                    }
-                }
-            }
-        } catch (Throwable t) {
-            logging.logToError("Proxy config read: " + t.getMessage());
-        }
+        // Do not use reflection on Burp internals (exportProjectOptionsAsJson etc.) — the API
+        // is not part of Montoya and breaks across Burp versions. Use default; user can set manually.
         return "127.0.0.1:8080";
     }
 

@@ -4,6 +4,10 @@
 
 - (None.)
 
+## [0.10.2] / [0.7.3] — 2026-02-14
+
+- **Burp 0.7.3** — Tab visibility: register tab first, keep Registration reference; fallback error panel; remove proxy reflection (exportProjectOptionsAsJson); View menu hint; audit doc.
+
 ## [0.10.2] / [0.7.2] — 2026-02-13
 
 - **Thick client findings** — Dynamic findings from scan (Electron, Qt, .NET, certs, chains, gaps). **Payload library** — HackBar-style payloads tab in Burp (browse by category, copy payload).
