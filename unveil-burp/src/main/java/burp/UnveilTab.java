@@ -271,8 +271,8 @@ public class UnveilTab {
 
         // Daemon mode
         JPanel daemonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
-        this.useDaemonCheck = new JCheckBox("Use daemon", false);
-        useDaemonCheck.setToolTipText("Call POST /scan instead of CLI (faster repeat scans)");
+        this.useDaemonCheck = new JCheckBox("Use daemon", true);
+        useDaemonCheck.setToolTipText("Call POST /scan instead of CLI (recommended; no Python/pip needed if you run unveil-daemon.exe)");
         daemonPanel.add(useDaemonCheck);
         this.daemonUrlField = new JTextField(28);
         daemonUrlField.setToolTipText("e.g. http://127.0.0.1:8000");
@@ -322,6 +322,22 @@ public class UnveilTab {
         this.versionLabel = new JLabel("Extension " + extVer + " · CLI: —");
         versionLabel.setForeground(new Color(100, 100, 100));
         versionLabel.setFont(versionLabel.getFont().deriveFont(Font.ITALIC, versionLabel.getFont().getSize2D() - 1));
+
+        final String docsUrl = "https://github.com/Pa7ch3s/Unveil";
+        JLabel docsLink = new JLabel("Full documentation");
+        docsLink.setForeground(new Color(30, 100, 180));
+        docsLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        docsLink.setToolTipText(docsUrl);
+        docsLink.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                try {
+                    Desktop.getDesktop().browse(java.net.URI.create(docsUrl));
+                } catch (IOException ex) {
+                    logging.logToError("Failed to open documentation: " + ex.getMessage());
+                }
+            }
+        });
 
         // Proxy / Cert helper (thick client: proxy env + CA cert instructions)
         JPanel proxyCertPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
@@ -1186,6 +1202,7 @@ public class UnveilTab {
         JPanel statusRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
         statusRow.add(statusLabel);
         statusRow.add(versionLabel);
+        statusRow.add(docsLink);
         scanTab.add(statusRow);
 
         JPanel advancedTab = new JPanel();
@@ -1229,7 +1246,7 @@ public class UnveilTab {
             if (!exe.isEmpty()) unveilExeField.setText(exe);
             String daemonUrl = prefs.get("daemonUrl", "http://127.0.0.1:8000");
             daemonUrlField.setText(daemonUrl);
-            useDaemonCheck.setSelected(prefs.getBoolean("useDaemon", false));
+            useDaemonCheck.setSelected(prefs.getBoolean("useDaemon", true));
             optExtended.setSelected(prefs.getBoolean("optExtended", false));
             optOffensive.setSelected(prefs.getBoolean("optOffensive", false));
             optForce.setSelected(prefs.getBoolean("optForce", false));
@@ -1831,8 +1848,9 @@ public class UnveilTab {
                 scanButton.setEnabled(true);
                 if (exitCode != 0) {
                     boolean cmdNotFound = (exitCode == 127);
-                    String installHint = "Unveil CLI not found. Install: pipx install git+https://github.com/Pa7ch3s/Unveil.git\n\n"
-                        + "If already installed, set \"Unveil executable (optional)\" to the full path (e.g. from 'which unveil').";
+                    String installHint = "Unveil CLI not found.\n\n"
+                        + "Easiest (plug and play): download \"unveil-burp-plug-and-play-windows.zip\" from https://github.com/Pa7ch3s/Unveil/releases — unzip, run unveil-daemon.exe, keep \"Use daemon\" checked above. No Python or pip needed.\n\n"
+                        + "Or install CLI: pipx install git+https://github.com/Pa7ch3s/Unveil.git and set \"Unveil executable (optional)\" to the full path (e.g. from 'where unveil' on Windows).";
                     boolean appliedErrorReport = false;
                     if (!finalResult.isEmpty() && !cmdNotFound) {
                         try {
@@ -1878,8 +1896,8 @@ public class UnveilTab {
         SwingUtilities.invokeLater(() -> {
             scanButton.setEnabled(true);
             statusLabel.setText("Error.");
-            String install = "Install: pipx install git+https://github.com/Pa7ch3s/Unveil.git\n\n" +
-                (notFound ? "If already installed, set \"Unveil executable (optional)\" to the full path (e.g. from 'which unveil')." : "");
+            String install = "Easiest (plug and play): download \"unveil-burp-plug-and-play-windows.zip\" from https://github.com/Pa7ch3s/Unveil/releases — unzip, run unveil-daemon.exe, keep \"Use daemon\" checked. No Python/pip needed.\n\n"
+                + "Or install CLI: pipx install git+https://github.com/Pa7ch3s/Unveil.git and set \"Unveil executable (optional)\" to the full path.";
             summaryArea.setText("Could not run Unveil.\n\n" + displayMsg + "\n\n" + install);
             resultsToolbar.setVisible(false);
         });

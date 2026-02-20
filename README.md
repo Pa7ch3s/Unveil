@@ -93,6 +93,10 @@ Use the report’s **attack graph**, **checklist_findings**, and **discovered_as
 
 **One install: CLI + Burp extension**
 
+**Windows — plug and play (no Python/pip):** Download [unveil-burp-plug-and-play-windows.zip](https://github.com/Pa7ch3s/Unveil/releases) from the latest release. Unzip, load the JAR in Burp, run `unveil-daemon.exe`, and in the Unveil tab keep **Use daemon** checked. Then Scan. No install steps.
+
+**From source (all platforms):**
+
 1. **Clone the repo** (for both CLI and Burp extension): `git clone https://github.com/Pa7ch3s/Unveil.git && cd Unveil`
 2. **Install the CLI** (required for terminal scans; optional if you only use Burp + daemon): `pipx install .` — or from PyPI: `pipx install unveil-radar`. Run `unveil -h` to confirm.
 3. **Install the Burp extension:** `cd unveil-burp && ./gradlew jar` — JAR: `unveil-burp/build/libs/unveil-burp-0.7.5.jar`. In Burp Suite (2023.8+): **Extensions** → **Installed** → **Add** → **Extension type: Java** → select that JAR. The **Unveil** tab appears.

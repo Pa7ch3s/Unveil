@@ -7,7 +7,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  build-linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,15 +29,84 @@ jobs:
           cd unveil-burp
           chmod +x gradlew
           ./gradlew jar
-          echo "JAR built:"
           ls -la build/libs/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: |
+            dist/*
+            unveil-burp/build/libs/unveil-burp-*.jar
+
+  build-windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Unveil and PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+          pip install pyinstaller
+      - name: Build daemon exe
+        run: |
+          pyinstaller --onefile -n unveil-daemon --collect-all unveil scripts/run_daemon.py
+          dir dist
+      - name: Upload exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-daemon-exe
+          path: dist/unveil-daemon.exe
+
+  release:
+    needs: [build-linux, build-windows-exe]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Linux build
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-build
+          path: linux-build
+      - name: Download Windows exe
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-daemon-exe
+          path: windows-exe
+
+      - name: Create plug-and-play zip (Windows)
+        run: |
+          mkdir -p unveil-burp-plug-and-play-windows
+          cp linux-build/unveil-burp/build/libs/unveil-burp-*.jar unveil-burp-plug-and-play-windows/ 2>/dev/null || cp linux-build/unveil-burp-*.jar unveil-burp-plug-and-play-windows/
+          cp windows-exe/unveil-daemon.exe unveil-burp-plug-and-play-windows/
+          cat > unveil-burp-plug-and-play-windows/README.txt << 'EOF'
+          Unveil Burp extension — plug and play (Windows)
+          ================================================
+
+          1. Load the JAR in Burp: Extensions → Installed → Add → Java → select unveil-burp-*.jar
+          2. Double-click unveil-daemon.exe (keep it running)
+          3. In the Unveil tab: check "Use daemon", URL http://127.0.0.1:8000
+          4. Enter a path (e.g. C:\Program Files\MyApp) and click Scan
+
+          No Python or pip install needed.
+          EOF
+          zip -r unveil-burp-plug-and-play-windows.zip unveil-burp-plug-and-play-windows
+          ls -la unveil-burp-plug-and-play-windows.zip
 
       - name: Create Release and upload assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/*
-            unveil-burp/build/libs/unveil-burp-*.jar
+            linux-build/dist/*
+            linux-build/unveil-burp/build/libs/unveil-burp-*.jar
+            windows-exe/unveil-daemon.exe
+            unveil-burp-plug-and-play-windows.zip
           body_path: CHANGELOG.md
           generate_release_notes: true
 
@@ -46,4 +115,4 @@ jobs:
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: twine upload dist/*
+        run: twine upload linux-build/dist/*
