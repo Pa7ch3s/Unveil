@@ -91,11 +91,14 @@ Use the report’s **attack graph**, **checklist_findings**, and **discovered_as
 
 ## Getting started
 
-1. **Install the CLI:** `pipx install git+https://github.com/Pa7ch3s/Unveil.git` (requires Python 3.9+).
-2. **Run a first scan:** `unveil -C /path/to/your/app` (e.g. a `.app` bundle, or `C:\Program Files\MyApp` on Windows). Use a directory or `.app` for full recon; use a single file (e.g. `.exe`) for one binary only.
-3. **Read the output:** Banner → Nmap-style summary (target, exploitability band, missing roles, surface counts) → full JSON. For a richer first pass, add `-e -O`: `unveil -C /path/to/app -e -O`.
+**One install: CLI + Burp extension**
 
-**With Burp:** Load the [Unveil extension](unveil-burp/) (build JAR or download from Releases), set the target path in the tab, click **Scan**. If you see “unveil not found”, install the CLI above and set **Unveil executable (optional)** to the path from `which unveil` (or use **Use daemon** and start the daemon with `unveil` or `python -m unveil.daemon`). Use **Send selected to Repeater** on the Attack graph tab to send URLs to Burp.
+1. **Clone the repo** (for both CLI and Burp extension): `git clone https://github.com/Pa7ch3s/Unveil.git && cd Unveil`
+2. **Install the CLI** (required for terminal scans; optional if you only use Burp + daemon): `pipx install .` — or from PyPI: `pipx install unveil-radar`. Run `unveil -h` to confirm.
+3. **Install the Burp extension:** `cd unveil-burp && ./gradlew jar` — JAR: `unveil-burp/build/libs/unveil-burp-0.7.5.jar`. In Burp Suite (2023.8+): **Extensions** → **Installed** → **Add** → **Extension type: Java** → select that JAR. The **Unveil** tab appears.
+4. **Run a first scan:** **CLI:** `unveil -C /path/to/your/app` (e.g. `.app` or directory; richer: `unveil -C /path/to/app -e -O`). **Burp:** In the Unveil tab, set **Path** (or **Browse…**), click **Scan**. If you see "unveil not found", set **Unveil executable (optional)** to the path from `which unveil`, or enable **Use daemon** and start with `unveil` or `python -m unveil.daemon`.
+5. **Read the output:** Banner → Nmap-style summary → full JSON. In Burp: **Summary**, **Attack graph** (**Send selected to Repeater** for URLs), **Checklist**, **Discovered assets**, **Chainability**.
+
 
 **Report at a glance:** **Summary** = high-level verdict and counts; **Attack graph** = what to hunt (missing role → surface → targets); **Checklist** = potential secrets and config risks (with severity); **Discovered assets** = files by type; **Chainability** = which file references which path/URL; **Instrumentation hints** = per-surface hook/Frida suggestions; **Paths to watch** = paths for process monitor correlation.
 
