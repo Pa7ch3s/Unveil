@@ -69,6 +69,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install zip
+        run: sudo apt-get update && sudo apt-get install -y zip
+
       - name: Download Linux build
         uses: actions/download-artifact@v4
         with:
@@ -83,7 +86,7 @@ jobs:
       - name: Create plug-and-play zip (Windows)
         run: |
           mkdir -p unveil-burp-plug-and-play-windows
-          cp linux-build/unveil-burp/build/libs/unveil-burp-*.jar unveil-burp-plug-and-play-windows/ 2>/dev/null || cp linux-build/unveil-burp-*.jar unveil-burp-plug-and-play-windows/
+          find linux-build -name "unveil-burp-*.jar" -exec cp {} unveil-burp-plug-and-play-windows/ \;
           cp windows-exe/unveil-daemon.exe unveil-burp-plug-and-play-windows/
           cat > unveil-burp-plug-and-play-windows/README.txt << 'EOF'
           Unveil Burp extension — plug and play (Windows)
