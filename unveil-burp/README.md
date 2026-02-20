@@ -4,7 +4,12 @@ Adds an **Unveil** tab to Burp Suite: scan apps/binaries for attack surfaces, se
 
 ## How to install (Burp)
 
-1. **Get the JAR** — Download `unveil-burp-0.7.5.jar` from [GitHub Releases](https://github.com/Pa7ch3s/Unveil/releases), or build from source: `cd unveil-burp && ./gradlew jar` (output: `build/libs/unveil-burp-0.7.5.jar`).
+1. **Get the JAR** — Download `unveil-burp-0.7.5.jar` from [GitHub Releases](https://github.com/Pa7ch3s/Unveil/releases) (if published), or **on another laptop**: clone the repo, then build:
+   ```bash
+   git clone https://github.com/Pa7ch3s/Unveil.git && cd Unveil/unveil-burp
+   ./gradlew jar
+   ```
+   JAR output: `build/libs/unveil-burp-0.7.5.jar`. Load that file in Burp (Extensions → Add → Java).
 2. **Load in Burp** — Open Burp Suite (2023.8+). Go to **Extensions** → **Installed** → **Add** → **Extension type: Java** → select the JAR file.
 3. **Open the tab** — The **Unveil** tab appears in the main tab bar (same row as Dashboard, Target, Proxy). If you don't see it: **View** menu (top) → click **Unveil**, or **View** → **Restore default tab layout**.
 4. **Optional (CLI)** — If scan fails with "unveil not found", install the CLI (`pipx install git+https://github.com/Pa7ch3s/Unveil.git`) and set **Unveil executable (optional)** in the tab to the path from `which unveil`, or use **Use daemon** and start the daemon separately.
