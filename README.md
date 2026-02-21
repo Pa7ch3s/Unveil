@@ -45,8 +45,9 @@ Models: execution surfaces, trust boundaries, persistence anchors, and lateral b
 
 ---
 
-## Features (v0.10.4)
+## Features (v0.10.7)
 
+* **v0.10.7** — CLI and release tag aligned; plug-and-play Windows zip + daemon exe.
 * **v0.10.4** — CLI 0.10.4, Burp 0.7.5. Consolidated Findings and Summary tabs with type dropdown; custom strings filter in Interesting strings.
 * **v0.7.5** (Burp) — Single Findings tab (Thick client / Permission / Cert / Dotnet / CVE) and Summary tab (Main / DB / Import / Packed) with dropdowns; custom strings filter.
 * **v0.10.1** — Version bump (CLI 0.10.1, Burp 0.7.1).
@@ -91,17 +92,25 @@ Use the report’s **attack graph**, **checklist_findings**, and **discovered_as
 
 ## Getting started
 
-**One install: CLI + Burp extension**
+**One command: CLI + Burp extension (no separate steps)**
 
-**Windows — plug and play (no Python/pip):** Download [unveil-burp-plug-and-play-windows.zip](https://github.com/Pa7ch3s/Unveil/releases) from the latest release. Unzip, load the JAR in Burp, run `unveil-daemon.exe`, and in the Unveil tab keep **Use daemon** checked. Then Scan. No install steps.
+| Platform | One-shot install |
+|----------|------------------|
+| **Linux / macOS** | `curl -sL https://raw.githubusercontent.com/Pa7ch3s/Unveil/main/scripts/install.sh \| bash` |
+| **Windows (PowerShell)** | `irm https://raw.githubusercontent.com/Pa7ch3s/Unveil/main/scripts/install.ps1 \| iex` |
 
-**From source (all platforms):**
+This installs the CLI (via pipx or pip), downloads the latest Burp JAR to a standard directory, and on Windows also downloads `unveil-daemon.exe`. At the end you get one set of next steps: load the JAR in Burp, run the daemon if using Burp, then run `unveil -h` for CLI. No clone/build steps required.
 
-1. **Clone the repo** (for both CLI and Burp extension): `git clone https://github.com/Pa7ch3s/Unveil.git && cd Unveil`
-2. **Install the CLI** (required for terminal scans; optional if you only use Burp + daemon): `pipx install .` — or from PyPI: `pipx install unveil-radar`. Run `unveil -h` to confirm.
-3. **Install the Burp extension:** `cd unveil-burp && ./gradlew jar` — JAR: `unveil-burp/build/libs/unveil-burp-0.7.5.jar`. In Burp Suite (2023.8+): **Extensions** → **Installed** → **Add** → **Extension type: Java** → select that JAR. The **Unveil** tab appears.
-4. **Run a first scan:** **CLI:** `unveil -C /path/to/your/app` (e.g. `.app` or directory; richer: `unveil -C /path/to/app -e -O`). **Burp:** In the Unveil tab, set **Path** (or **Browse…**), click **Scan**. If you see "unveil not found", set **Unveil executable (optional)** to the path from `which unveil`, or enable **Use daemon** and start with `unveil` or `python -m unveil.daemon`.
-5. **Read the output:** Banner → Nmap-style summary → full JSON. In Burp: **Summary**, **Attack graph** (**Send selected to Repeater** for URLs), **Checklist**, **Discovered assets**, **Chainability**.
+**Windows — plug and play (no Python/pip):** Prefer the one-command install above. Alternatively, download [unveil-burp-plug-and-play-windows.zip](https://github.com/Pa7ch3s/Unveil/releases) from the latest release. Unzip, load the JAR in Burp, run `unveil-daemon.exe`, and in the Unveil tab keep **Use daemon** checked. Then Scan.
+
+**From source (clone then install):**
+
+1. **Clone the repo:** `git clone https://github.com/Pa7ch3s/Unveil.git && cd Unveil`
+2. **One-shot from repo:** run `./scripts/install.sh` (Linux/mac) or `.\scripts\install.ps1` (Windows) — same outcome as the curl/irm one-liners above. Or do steps 3–4 manually.
+3. **CLI:** `pipx install .` or `pipx install unveil-radar` from PyPI. Run `unveil -h` to confirm.
+4. **Burp extension:** `cd unveil-burp && ./gradlew jar` — JAR: `unveil-burp/build/libs/unveil-burp-*.jar`. In Burp: **Extensions** → **Installed** → **Add** → **Java** → select that JAR.
+5. **Run a first scan:** **CLI:** `unveil -C /path/to/your/app` (e.g. `.app` or directory; richer: `unveil -C /path/to/app -e -O`). **Burp:** In the Unveil tab, set **Path** (or **Browse…**), click **Scan**. If you see "unveil not found", set **Unveil executable (optional)** to the path from `which unveil`, or enable **Use daemon** and start the daemon (`unveil` or `python -m unveil.daemon`, or on Windows run `unveil-daemon.exe`).
+6. **Read the output:** Banner → Nmap-style summary → full JSON. In Burp: **Summary**, **Attack graph** (**Send selected to Repeater** for URLs), **Checklist**, **Discovered assets**, **Chainability**.
 
 
 **Report at a glance:** **Summary** = high-level verdict and counts; **Attack graph** = what to hunt (missing role → surface → targets); **Checklist** = potential secrets and config risks (with severity); **Discovered assets** = files by type; **Chainability** = which file references which path/URL; **Instrumentation hints** = per-surface hook/Frida suggestions; **Paths to watch** = paths for process monitor correlation.
@@ -178,7 +187,7 @@ Step-by-step commands with full syntax. Add screenshots where applicable.
 ```bash
 unveil --version
 ```
-Displays the installed version (e.g. `Unveil RADAR v0.10.4`).
+Displays the installed version (e.g. `Unveil RADAR v0.10.7`).
 
 ```bash
 unveil -h

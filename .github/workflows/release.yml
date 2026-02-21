@@ -1,3 +1,5 @@
+# Release build: runs on tag push (e.g. v0.10.8).
+# Keep tag and version aligned: bump pyproject.toml (and optionally unveil-burp version) before tagging. See docs/RELEASING.md.
 name: build-release
 on:
   push:
