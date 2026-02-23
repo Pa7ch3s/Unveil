@@ -127,9 +127,19 @@ jobs:
           zip -r Unveil-WIN-plug-and-play.zip Unveil-WIN-plug-and-play
           ls -la windows-exe/ Unveil-WIN-plug-and-play.zip
 
+      - name: Verify release assets exist
+        run: |
+          echo "Checking files to upload..."
+          ls -la windows-exe/
+          test -f windows-exe/unveil-daemon.exe || (echo "Missing windows-exe/unveil-daemon.exe" && exit 1)
+          test -f windows-exe/unveil-engine-WIN.exe || (echo "Missing windows-exe/unveil-engine-WIN.exe" && exit 1)
+          test -f Unveil-WIN-plug-and-play.zip || (echo "Missing Unveil-WIN-plug-and-play.zip" && exit 1)
+          echo "All required assets present."
+
       - name: Create Release and upload assets
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
           files: |
             linux-build/dist/*
             linux-build/unveil-burp/build/libs/unveil-burp-*.jar

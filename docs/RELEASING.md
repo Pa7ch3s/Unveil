@@ -27,4 +27,4 @@ Result: tag **v0.10.8** and the Python package version **0.10.8** (and release a
 
 - Python: `dist/*` (sdist + wheel) → uploaded to PyPI and attached to the GitHub release.
 - Burp: `unveil-burp-*.jar` → attached to the release.
-- Windows: `unveil-daemon.exe` and `unveil-burp-plug-and-play-windows.zip` → attached to the release.
+- Windows: `unveil-daemon.exe`, `unveil-engine-WIN.exe`, `unveil-burp-plug-and-play-windows.zip`, and `Unveil-WIN-plug-and-play.zip` → attached to the release.
