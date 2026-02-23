@@ -27,13 +27,19 @@ def clear_analysis_cache():
 
 
 def _run(cmd):
-    return subprocess.run(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        text=True,
-        check=False,
-    ).stdout.strip()
+    """Run external command; return stdout or empty string on failure (avoids WinError 2 on Windows when not in PATH)."""
+    try:
+        r = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+        return (r.stdout or "").strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return ""
 
 
 def _is_macho(path):
@@ -200,12 +206,65 @@ def imports(target):
     return results
 
 
+def _strings_in_process(path, min_len=4):
+    """
+    Extract printable strings from a binary in-process (LIEF sections or raw file).
+    No external tools (strings.exe, etc.) — works on Windows without PATH.
+    """
+    data = b""
+    if lief:
+        try:
+            binary = lief.parse(path)
+            if binary and hasattr(binary, "sections"):
+                for section in binary.sections:
+                    try:
+                        c = section.content
+                        if c is None:
+                            continue
+                        if isinstance(c, (bytes, bytearray)):
+                            data += c
+                        else:
+                            data += bytes(c)
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+    if not data:
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+        except Exception:
+            return []
+    # Printable-ASCII runs of length >= min_len (same idea as Unix "strings")
+    result = []
+    current = []
+    for b in data:
+        if 0x20 <= b <= 0x7e or b in (0x09, 0x0a):
+            current.append(b)
+        else:
+            if len(current) >= min_len:
+                try:
+                    s = bytes(current).decode("ascii", errors="replace").strip()
+                    if s:
+                        result.append(s)
+                except Exception:
+                    pass
+            current = []
+    if len(current) >= min_len:
+        try:
+            s = bytes(current).decode("ascii", errors="replace").strip()
+            if s:
+                result.append(s)
+        except Exception:
+            pass
+    return result
+
+
 def strings(target, min_len=4):
+    """Extract strings from a file in-process (no external tools)."""
     if not os.path.exists(target):
         raise FileNotFoundError(target)
-
-    out = _run(["strings", "-n", str(min_len), target])
-    return out.splitlines()
+    return _strings_in_process(target, min_len)
 
 
 # Patterns for "interesting" strings (URLs, IPs, paths, secrets-related) — pen-test actionable
@@ -219,10 +278,9 @@ def interesting_strings(target, max_per_file=100, min_len=6):
     """
     Harvest strings from a binary and return those likely useful for pen testing:
     URLs, IPs, path-like refs, and secret/key-like patterns. Capped per file to keep report size sane.
+    Uses in-process extraction (LIEF/raw) only — no external tools, so Windows works without PATH.
     """
     if not os.path.exists(target) or not os.path.isfile(target):
-        return []
-    if shutil.which("strings") is None:
         return []
     try:
         raw = strings(target, min_len=min_len)
@@ -440,14 +498,14 @@ def binary_specifications(path):
     specs = _macho_specifications(path)
     if specs:
         return specs
-    # Fallback: minimal file_type + size for any file
+    # Fallback: minimal file_type + size (no external "file" so Windows works)
     try:
-        ft = _run(["file", "-b", path])
+        size = os.path.getsize(path) if os.path.isfile(path) else None
         return {
             "type": "file",
             "path": os.path.basename(path),
-            "physical_size": os.path.getsize(path),
-            "file_type": (ft or "").strip(),
+            "physical_size": size,
+            "file_type": None,
         }
     except Exception:
         return None

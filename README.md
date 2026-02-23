@@ -45,8 +45,9 @@ Models: execution surfaces, trust boundaries, persistence anchors, and lateral b
 
 ---
 
-## Features (v0.10.7)
+## Features (v0.10.8)
 
+* **v0.10.8 / Burp 0.7.6** — **Windows plug-and-play:** Scanner uses **LIEF** and in-process string extraction (no `strings.exe` or other external tools), so the daemon runs reliably on Windows without PATH hacks. Burp extension auto-starts the daemon from `%LOCALAPPDATA%\Unveil\` when you load the JAR; install.ps1 places the no-console exe there. One-click Scan, no terminal.
 * **v0.10.7** — CLI and release tag aligned; plug-and-play Windows zip + daemon exe.
 * **v0.10.4** — CLI 0.10.4, Burp 0.7.5. Consolidated Findings and Summary tabs with type dropdown; custom strings filter in Interesting strings.
 * **v0.7.5** (Burp) — Single Findings tab (Thick client / Permission / Cert / Dotnet / CVE) and Summary tab (Main / DB / Import / Packed) with dropdowns; custom strings filter.
@@ -99,7 +100,7 @@ Use the report’s **attack graph**, **checklist_findings**, and **discovered_as
 | **Linux / macOS** | `curl -sL https://raw.githubusercontent.com/Pa7ch3s/Unveil/main/scripts/install.sh \| bash` |
 | **Windows (PowerShell)** | `irm https://raw.githubusercontent.com/Pa7ch3s/Unveil/main/scripts/install.ps1 \| iex` |
 
-This installs the CLI (via pipx or pip), downloads the latest Burp JAR to a standard directory, and on Windows also downloads `unveil-daemon.exe`. At the end you get one set of next steps: load the JAR in Burp, run the daemon if using Burp, then run `unveil -h` for CLI. No clone/build steps required.
+This installs the CLI (via pipx or pip), downloads the latest Burp JAR to a standard directory, and on Windows also downloads `unveil-daemon.exe`. At the end you get one set of next steps: load the JAR in Burp, run the daemon if using Burp, then run `unveil -h` for CLI. No clone/build steps required. **Windows:** The scanner uses **LIEF** and in-process string extraction only (no `strings.exe` or other external tools), so the daemon works without adding anything to PATH; the extension can auto-start the daemon from `%LOCALAPPDATA%\Unveil\`.
 
 **Windows — plug and play (no Python/pip):** Prefer the one-command install above. Alternatively, download [unveil-burp-plug-and-play-windows.zip](https://github.com/Pa7ch3s/Unveil/releases) from the latest release. Unzip, load the JAR in Burp, run `unveil-daemon.exe`, and in the Unveil tab keep **Use daemon** checked. Then Scan.
 
@@ -148,7 +149,7 @@ Unveil models a simple kill chain: get a foothold (ANCHOR), move laterally (BRID
 pipx install git+https://github.com/Pa7ch3s/Unveil.git
 ```
 
-**Burp Suite extension:** Add an **Unveil** tab inside Burp. **How to install:** (1) Download `unveil-burp-0.7.5.jar` from [Releases](https://github.com/Pa7ch3s/Unveil/releases), or build from source: `cd unveil-burp && ./gradlew jar`. (2) In Burp: **Extensions** → **Installed** → **Add** → **Extension type: Java** → select the JAR. (3) The **Unveil** tab appears in the main tab bar (if not visible, use **View** menu → **Unveil** or **Restore default tab layout**). See **[unveil-burp/](unveil-burp/)** for details.
+**Burp Suite extension:** Add an **Unveil** tab inside Burp. **How to install:** (1) Download `unveil-burp-0.7.6.jar` from [Releases](https://github.com/Pa7ch3s/Unveil/releases), or build from source: `cd unveil-burp && ./gradlew jar`. (2) In Burp: **Extensions** → **Installed** → **Add** → **Extension type: Java** → select the JAR. (3) The **Unveil** tab appears in the main tab bar (if not visible, use **View** menu → **Unveil** or **Restore default tab layout**). See **[unveil-burp/](unveil-burp/)** for details.
 
 **Upgrading from `unv`:** The CLI was renamed to `unveil`. If you still see `unv` or `unv-daemon` when you tab-complete:
 
@@ -189,7 +190,7 @@ Step-by-step commands with full syntax. Add screenshots where applicable.
 ```bash
 unveil --version
 ```
-Displays the installed version (e.g. `Unveil RADAR v0.10.7`).
+Displays the installed version (e.g. `Unveil RADAR v0.10.8`).
 
 ```bash
 unveil -h

@@ -4,6 +4,12 @@
 
 - (None.)
 
+## [0.10.8] / [0.7.6] — 2026-02-23
+
+- **Windows plug-and-play (LIEF shift)** — Scanner no longer shells out to external tools. String extraction uses **LIEF** (binary sections) and in-process raw fallback only; no `strings.exe` or PATH dependency, fixing 500 / WinError 2 on Windows. `_run()` catches FileNotFoundError so missing `file`/`otool`/`ldd` don’t crash; `binary_specifications` fallback no longer calls `file`.
+- **Burp 0.7.6** — Invisible Engine: extension auto-starts daemon from `%LOCALAPPDATA%\Unveil\unveil-daemon.exe` when heartbeat fails (no terminal). PyInstaller build uses `--noconsole`. install.ps1 documents standard path for auto-start; “Done” message updated.
+- **Versions** — CLI 0.10.8, Burp extension 0.7.6; install script fallbacks and README/CHANGELOG updated.
+
 ## [0.10.4] / [0.7.5] — 2026-02-14
 
 - **Burp 0.7.5** — Consolidated Findings tab (Thick client / Permission / Cert / Dotnet / CVE lookup) with type dropdown; consolidated Summary tab (Main / DB summary / Import summary / Packed/entropy) with type dropdown; Interesting strings: custom strings filter (one per line, show only matching strings).

@@ -29,9 +29,9 @@ Write-Host "[2/4] Fetching latest release..." -ForegroundColor Yellow
 try {
   $json = Invoke-RestMethod -Uri $Api -Headers @{ "User-Agent" = "Unveil-Install" }
 } catch {
-  Write-Host "      API failed. Using fallback URLs (v0.10.7)." -ForegroundColor Yellow
-  $jarUrl = "https://github.com/$Repo/releases/download/v0.10.7/unveil-burp-0.7.5.jar"
-  $exeUrl = "https://github.com/$Repo/releases/download/v0.10.7/unveil-daemon.exe"
+  Write-Host "      API failed. Using fallback URLs (v0.10.8)." -ForegroundColor Yellow
+  $jarUrl = "https://github.com/$Repo/releases/download/v0.10.8/unveil-burp-0.7.6.jar"
+  $exeUrl = "https://github.com/$Repo/releases/download/v0.10.8/unveil-daemon.exe"
   $json = $null
 }
 if ($json) {
@@ -39,11 +39,12 @@ if ($json) {
   $exeAsset = $json.assets | Where-Object { $_.name -eq "unveil-daemon.exe" } | Select-Object -First 1
   $jarUrl = $jarAsset.browser_download_url
   $exeUrl = $exeAsset.browser_download_url
-  if (-not $jarUrl) { $jarUrl = "https://github.com/$Repo/releases/download/v0.10.7/unveil-burp-0.7.5.jar" }
-  if (-not $exeUrl) { $exeUrl = "https://github.com/$Repo/releases/download/v0.10.7/unveil-daemon.exe" }
+  if (-not $jarUrl) { $jarUrl = "https://github.com/$Repo/releases/download/v0.10.8/unveil-burp-0.7.6.jar" }
+  if (-not $exeUrl) { $exeUrl = "https://github.com/$Repo/releases/download/v0.10.8/unveil-daemon.exe" }
 }
 
-# 3) Download JAR and exe
+# 3) Download JAR and exe to standard directory (Burp extension auto-starts daemon from here)
+#    Windows: %LOCALAPPDATA%\Unveil\ — required for DaemonLauncher to find unveil-daemon.exe
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 $jarPath = Join-Path $InstallDir "unveil-burp.jar"
 $exePath = Join-Path $InstallDir "unveil-daemon.exe"
@@ -83,6 +84,6 @@ Write-Host ""
 Write-Host "Done. Next steps:" -ForegroundColor Cyan
 Write-Host "  * CLI:   run 'unveil -h'"
 Write-Host "  * Burp:  Extensions -> Add -> Java -> select: $jarPath"
-Write-Host "  * Daemon: run '$exePath' (keep running); in Unveil tab check 'Use daemon' and Scan."
+Write-Host "  * Daemon: Load the JAR; the extension will auto-start the daemon from $exePath when you Scan (no terminal)."
 Write-Host "  * WSL:   If using daemon in Kali, run with host 0.0.0.0; Burp will use config from $configPath"
 Write-Host ""

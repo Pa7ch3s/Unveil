@@ -30,8 +30,8 @@ fi
 echo "[2/3] Fetching latest release info..."
 JSON=$(curl -sL "$API" 2>/dev/null || true)
 if [ -z "$JSON" ]; then
-  echo "      Fallback: using fixed JAR URL (v0.10.7)"
-  JAR_URL="https://github.com/$REPO/releases/download/v0.10.7/unveil-burp-0.7.5.jar"
+  echo "      Fallback: using fixed JAR URL (v0.10.8)"
+  JAR_URL="https://github.com/$REPO/releases/download/v0.10.8/unveil-burp-0.7.6.jar"
 else
   JAR_URL=$(echo "$JSON" | python3 -c "
 import sys, json
@@ -46,7 +46,7 @@ except Exception:
     pass
 " 2>/dev/null)
   if [ -z "$JAR_URL" ]; then
-    JAR_URL="https://github.com/$REPO/releases/download/v0.10.7/unveil-burp-0.7.5.jar"
+    JAR_URL="https://github.com/$REPO/releases/download/v0.10.8/unveil-burp-0.7.6.jar"
   fi
 fi
 
