@@ -62,7 +62,9 @@ public final class DaemonLauncher {
         });
     }
 
+    /** On Windows always use 127.0.0.1:8000 (WIN variant; no WSL). */
     private static String resolveDaemonBaseUrl() {
+        if (isWindows()) return DEFAULT_DAEMON_URL;
         try {
             String home = System.getProperty("user.home");
             if (home != null && !home.isEmpty()) {

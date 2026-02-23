@@ -38,6 +38,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.prefs.Preferences;
@@ -1271,8 +1272,10 @@ public class UnveilTab {
     }
 
     /** Load daemon URL from ~/.unveil/config.json (written by install.ps1 for WSL bridge). */
+    /** Load daemon URL from ~/.unveil/config.json. On Windows we skip so WIN variant always uses 127.0.0.1:8000 (no WSL). */
     private void loadUnveilConfigFile() {
         try {
+            if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows")) return;
             String home = System.getProperty("user.home");
             if (home == null || home.isEmpty()) return;
             File configFile = new File(home, ".unveil" + File.separator + "config.json");

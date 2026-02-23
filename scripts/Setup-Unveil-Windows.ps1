@@ -12,10 +12,19 @@ Write-Host ""
 
 # 1) Standard path
 if (!(Test-Path $WinPath)) { New-Item -ItemType Directory -Path $WinPath -Force | Out-Null }
-Write-Host "[1/4] Path: $WinPath" -ForegroundColor Green
+Write-Host "[1/5] Path: $WinPath" -ForegroundColor Green
 
-# 2) Latest release
-Write-Host "[2/4] Fetching latest release..." -ForegroundColor Yellow
+# 2) Clear WSL/stale daemon config so extension uses 127.0.0.1:8000 (no "connectivity ghost")
+$configPath = Join-Path $env:USERPROFILE ".unveil\config.json"
+if (Test-Path $configPath) {
+  Remove-Item $configPath -Force
+  Write-Host "[2/5] Removed old config (WSL/stale) so daemon URL = 127.0.0.1:8000" -ForegroundColor Green
+} else {
+  Write-Host "[2/5] No existing daemon config; extension will use 127.0.0.1:8000" -ForegroundColor Green
+}
+
+# 3) Latest release
+Write-Host "[3/5] Fetching latest release..." -ForegroundColor Yellow
 try {
   $json = Invoke-RestMethod -Uri $Api -Headers @{ "User-Agent" = "Unveil-WIN-Setup" }
 } catch {
@@ -35,18 +44,18 @@ if (-not $engineUrl -or -not $jarUrl) {
   exit 1
 }
 
-# 3) Download WIN engine and JAR
+# 4) Download WIN engine and JAR
 $enginePath = Join-Path $WinPath "unveil-engine-WIN.exe"
 $jarPath = Join-Path $WinPath "unveil-burp.jar"
-Write-Host "[3/4] Downloading unveil-engine-WIN.exe..." -ForegroundColor Yellow
+Write-Host "[4/5] Downloading unveil-engine-WIN.exe..." -ForegroundColor Yellow
 Invoke-WebRequest -Uri $engineUrl -OutFile $enginePath -UseBasicParsing
 Write-Host "      $enginePath" -ForegroundColor Green
 Write-Host "      Downloading unveil-burp.jar..." -ForegroundColor Yellow
 Invoke-WebRequest -Uri $jarUrl -OutFile $jarPath -UseBasicParsing
 Write-Host "      $jarPath" -ForegroundColor Green
 
-# 4) Firewall rule (WIN-labeled)
-Write-Host "[4/4] Firewall rule (Unveil-WIN-Internal, port 8000)..." -ForegroundColor Yellow
+# 5) Firewall rule (WIN-labeled)
+Write-Host "[5/5] Firewall rule (Unveil-WIN-Internal, port 8000)..." -ForegroundColor Yellow
 try {
   New-NetFirewallRule -DisplayName "Unveil-WIN-Internal" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8000 -ErrorAction Stop | Out-Null
   Write-Host "      Rule added." -ForegroundColor Green
@@ -56,6 +65,8 @@ try {
 
 Write-Host ""
 Write-Host "Done (WIN). Next steps:" -ForegroundColor Cyan
-Write-Host "  * Burp: Extensions -> Add -> Java -> select: $jarPath"
-Write-Host "  * Scan: Extension will auto-start unveil-engine-WIN.exe from $WinPath when needed."
+Write-Host "  1. In Burp: remove any existing Unveil extension (Extensions tab)."
+Write-Host "  2. Add -> Java -> select: $jarPath"
+Write-Host "  3. Check Output tab: 'Unveil: backend started automatically from ...\unveil-engine-WIN.exe'"
+Write-Host "  4. Daemon URL is 127.0.0.1:8000 (no WSL). Click Scan."
 Write-Host ""
