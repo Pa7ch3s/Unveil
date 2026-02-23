@@ -2,6 +2,7 @@
 Unveil daemon: local-only API for running scans.
 SECURITY: Binds to 127.0.0.1 only (no auth). Do not expose to the network.
 """
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -63,8 +64,11 @@ def scan(req: ScanRequest):
 
 
 def main():
-    # Bind localhost only; no TLS or auth. Do not expose this server to the network.
-    uvicorn.run("unveil.daemon:app", host="127.0.0.1", port=8000, reload=False)
+    # Bind host/port: default localhost-only. Set UNVEIL_DAEMON_HOST=0.0.0.0 for WSL so Windows Burp can connect.
+    host = os.environ.get("UNVEIL_DAEMON_HOST", "127.0.0.1")
+    port = int(os.environ.get("UNVEIL_DAEMON_PORT", "8000"))
+    # No TLS or auth. Do not expose 0.0.0.0 to untrusted networks.
+    uvicorn.run("unveil.daemon:app", host=host, port=port, reload=False)
 
 
 if __name__ == "__main__":

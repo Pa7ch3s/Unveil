@@ -56,9 +56,33 @@ Write-Host "[4/4] Downloading daemon exe..." -ForegroundColor Yellow
 Invoke-WebRequest -Uri $exeUrl -OutFile $exePath -UseBasicParsing
 Write-Host "      EXE: $exePath" -ForegroundColor Green
 
+# 5) WSL bridge (Windows only): detect WSL IP, write config for Burp, punch firewall
+$daemonPort = 8000
+$configDir = Join-Path $env:USERPROFILE ".unveil"
+$configPath = Join-Path $configDir "config.json"
+try {
+  $wslIp = (wsl hostname -I 2>$null).Trim().Split(" ")[0]
+  if ($wslIp -match "^\d+\.\d+\.\d+\.\d+$") {
+    Write-Host "[WSL] Found WSL at $wslIp — writing Burp daemon config and firewall rule." -ForegroundColor Green
+    if (!(Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
+    @{ daemon_host = $wslIp; daemon_port = $daemonPort } | ConvertTo-Json | Set-Content -Path $configPath -Encoding UTF8
+    Write-Host "      Config: $configPath (daemon_host=$wslIp, port=$daemonPort)" -ForegroundColor Green
+    try {
+      New-NetFirewallRule -DisplayName "Unveil-WSL-Bridge" -Direction Inbound -Action Allow -Protocol TCP -LocalPort $daemonPort -InterfaceAlias "vEthernet (WSL)" -ErrorAction Stop | Out-Null
+      Write-Host "      Firewall: rule 'Unveil-WSL-Bridge' added (port $daemonPort on WSL)." -ForegroundColor Green
+    } catch {
+      Write-Host "      Firewall: run as Administrator to add rule, or allow port $daemonPort manually." -ForegroundColor Yellow
+    }
+    Write-Host "      In WSL/Kali run: unveil (or python -m unveil.daemon) with host 0.0.0.0 so Windows Burp can connect (see docs)." -ForegroundColor Cyan
+  }
+} catch {
+  # Not WSL or wsl not available
+}
+
 Write-Host ""
 Write-Host "Done. Next steps:" -ForegroundColor Cyan
 Write-Host "  * CLI:   run 'unveil -h'"
 Write-Host "  * Burp:  Extensions -> Add -> Java -> select: $jarPath"
 Write-Host "  * Daemon: run '$exePath' (keep running); in Unveil tab check 'Use daemon' and Scan."
+Write-Host "  * WSL:   If using daemon in Kali, run with host 0.0.0.0; Burp will use config from $configPath"
 Write-Host ""

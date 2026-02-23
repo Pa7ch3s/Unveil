@@ -275,10 +275,14 @@ public class UnveilTab {
         useDaemonCheck.setToolTipText("Call POST /scan instead of CLI (recommended; no Python/pip needed if you run unveil-daemon.exe)");
         daemonPanel.add(useDaemonCheck);
         this.daemonUrlField = new JTextField(28);
-        daemonUrlField.setToolTipText("e.g. http://127.0.0.1:8000");
+        daemonUrlField.setToolTipText("e.g. http://127.0.0.1:8000 or http://WSL_IP:8000");
         daemonUrlField.setText("http://127.0.0.1:8000");
         daemonPanel.add(new JLabel("URL:"));
         daemonPanel.add(daemonUrlField);
+        JButton testConnectionBtn = new JButton("Test connection");
+        testConnectionBtn.setToolTipText("GET /health — green if daemon is reachable, red if connection refused.");
+        testConnectionBtn.addActionListener(e -> testDaemonConnection());
+        daemonPanel.add(testConnectionBtn);
 
         // Limits (optional)
         JPanel limitsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
@@ -1260,8 +1264,32 @@ public class UnveilTab {
             String proxyHostPort = prefs.get("proxyHostPort", "");
             if (!proxyHostPort.isEmpty()) proxyHostPortField.setText(proxyHostPort);
             optProxyBackend.setSelected(prefs.getBoolean("optProxyBackend", false));
+            loadUnveilConfigFile();
         } catch (Exception e) {
             logging.logToError("Load preferences: " + e.getMessage());
+        }
+    }
+
+    /** Load daemon URL from ~/.unveil/config.json (written by install.ps1 for WSL bridge). */
+    private void loadUnveilConfigFile() {
+        try {
+            String home = System.getProperty("user.home");
+            if (home == null || home.isEmpty()) return;
+            File configFile = new File(home, ".unveil" + File.separator + "config.json");
+            if (!configFile.isFile()) return;
+            String json = Files.readString(configFile.toPath(), StandardCharsets.UTF_8);
+            JsonObject config = JsonParser.parseString(json).getAsJsonObject();
+            if (config.has("daemon_host") && config.has("daemon_port")) {
+                String host = config.get("daemon_host").getAsString();
+                int port = config.get("daemon_port").getAsInt();
+                if (host != null && !host.isEmpty() && port > 0 && port <= 65535) {
+                    String url = "http://" + host + ":" + port;
+                    daemonUrlField.setText(url);
+                    logging.logToOutput("Unveil: daemon URL set from config: " + url);
+                }
+            }
+        } catch (Exception e) {
+            logging.logToError("Unveil config file: " + e.getMessage());
         }
     }
 
@@ -1664,6 +1692,49 @@ public class UnveilTab {
             liveResponseArea.setText("");
         }
         statusLabel.setText("All phases refreshed.");
+    }
+
+    /** Test connection to daemon (GET /health). Logs and sets statusLabel green/red. */
+    private void testDaemonConnection() {
+        String urlStr = daemonUrlField.getText() != null ? daemonUrlField.getText().trim() : "";
+        if (urlStr.isEmpty()) {
+            statusLabel.setText("Daemon URL is empty.");
+            logging.logToError("Unveil: Test connection — URL empty.");
+            return;
+        }
+        String base = urlStr.endsWith("/") ? urlStr : urlStr + "/";
+        statusLabel.setText("Testing connection…");
+        executor.execute(() -> {
+            try {
+                URL url = new URL(base + "health");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(5000);
+                conn.setReadTimeout(5000);
+                int code = conn.getResponseCode();
+                String finalUrl = urlStr;
+                if (code >= 200 && code < 300) {
+                    SwingUtilities.invokeLater(() -> {
+                        statusLabel.setText("Daemon reached at " + finalUrl);
+                        statusLabel.setForeground(new Color(0, 120, 0));
+                    });
+                    logging.logToOutput("Unveil: Daemon reached at " + finalUrl + ".");
+                } else {
+                    SwingUtilities.invokeLater(() -> {
+                        statusLabel.setText("Daemon returned " + code);
+                        statusLabel.setForeground(Color.DARK_GRAY);
+                    });
+                    logging.logToOutput("Unveil: Daemon at " + finalUrl + " returned " + code + ".");
+                }
+            } catch (Exception ex) {
+                String msg = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
+                SwingUtilities.invokeLater(() -> {
+                    statusLabel.setText("Connection refused. Check if unveil daemon is running in Kali.");
+                    statusLabel.setForeground(new Color(180, 0, 0));
+                });
+                logging.logToError("Unveil: Connection refused. Check if unveil daemon is running in Kali. " + msg);
+            }
+        });
     }
 
     private void runUnveilViaDaemon(String target) {
@@ -2738,6 +2809,85 @@ public class UnveilTab {
                         Collections.emptyList()
                     );
                     api.siteMap().add(issue);
+                }
+            }
+            // Populate Target tree with sendable URLs (discovered http(s) endpoints)
+            if (report.has("attack_graph")) {
+                JsonObject ag = report.getAsJsonObject("attack_graph");
+                if (ag != null && ag.has("sendable_urls")) {
+                    JsonArray urls = ag.getAsJsonArray("sendable_urls");
+                    if (urls != null) {
+                        int added = 0;
+                        for (JsonElement el : urls) {
+                            if (!el.isJsonObject()) continue;
+                            String url = str(el.getAsJsonObject().get("url"));
+                            if (url == null || (!url.startsWith("http://") && !url.startsWith("https://"))) continue;
+                            try {
+                                HttpRequest req = HttpRequest.httpRequestFromUrl(url);
+                                HttpRequestResponse reqResp = HttpRequestResponse.httpRequestResponse(req, null);
+                                api.siteMap().add(reqResp);
+                                added++;
+                            } catch (Exception ex) {
+                                logging.logToError("Unveil add URL to site map: " + ex.getMessage());
+                            }
+                        }
+                        if (added > 0) logging.logToOutput("Unveil: added " + added + " endpoint(s) to Target site map.");
+                    }
+                }
+            }
+            // Thick client and permission findings as AuditIssues (Issue Activity tab)
+            if (report.has("thick_client_findings")) {
+                JsonArray tcf = report.getAsJsonArray("thick_client_findings");
+                if (tcf != null) {
+                    for (int i = 0; i < Math.min(tcf.size(), 20); i++) {
+                        JsonElement el = tcf.get(i);
+                        if (!el.isJsonObject()) continue;
+                        JsonObject o = el.getAsJsonObject();
+                        String title = str(o.get("title"));
+                        String summary = str(o.get("summary"));
+                        String hunt = str(o.get("hunt_suggestion"));
+                        AuditIssueSeverity sev = AuditIssueSeverity.MEDIUM;
+                        if (title != null && (title.toLowerCase().contains("hijack") || title.toLowerCase().contains("rce") || title.toLowerCase().contains("injection"))) sev = AuditIssueSeverity.HIGH;
+                        AuditIssue issue = AuditIssue.auditIssue(
+                            "Unveil: " + (title != null && !title.isEmpty() ? title : "Thick client finding"),
+                            (summary != null ? summary : "") + (hunt != null && !hunt.isEmpty() ? "\nHunt: " + hunt : ""),
+                            "Confirm in lab; see Unveil Attack graph and Payloads tab.",
+                            baseUrl,
+                            sev,
+                            AuditIssueConfidence.TENTATIVE,
+                            "Unveil static analysis.",
+                            "See Unveil Thick client findings tab.",
+                            sev,
+                            Collections.emptyList()
+                        );
+                        api.siteMap().add(issue);
+                    }
+                }
+            }
+            if (report.has("permission_findings")) {
+                JsonArray pf = report.getAsJsonArray("permission_findings");
+                if (pf != null) {
+                    for (int i = 0; i < Math.min(pf.size(), 15); i++) {
+                        JsonElement el = pf.get(i);
+                        if (!el.isJsonObject()) continue;
+                        JsonObject o = el.getAsJsonObject();
+                        String finding = str(o.get("finding"));
+                        String path = str(o.get("path"));
+                        String fileUrl = path != null && !path.isEmpty() ? pathToFileUrl(new File(path).getAbsolutePath()) : baseUrl;
+                        AuditIssue issue = AuditIssue.auditIssue(
+                            "Unveil: Insecure permission",
+                            (finding != null ? finding : "") + (path != null ? " Path: " + path : ""),
+                            "Restrict permissions to current user or least privilege.",
+                            fileUrl,
+                            AuditIssueSeverity.HIGH,
+                            AuditIssueConfidence.TENTATIVE,
+                            "Unveil permission audit.",
+                            "See Unveil Permission findings tab.",
+                            AuditIssueSeverity.HIGH,
+                            Collections.emptyList()
+                        );
+                        api.siteMap().add(issue);
+                    }
                 }
             }
         } catch (Exception e) {

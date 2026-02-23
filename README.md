@@ -103,6 +103,8 @@ This installs the CLI (via pipx or pip), downloads the latest Burp JAR to a stan
 
 **Windows — plug and play (no Python/pip):** Prefer the one-command install above. Alternatively, download [unveil-burp-plug-and-play-windows.zip](https://github.com/Pa7ch3s/Unveil/releases) from the latest release. Unzip, load the JAR in Burp, run `unveil-daemon.exe`, and in the Unveil tab keep **Use daemon** checked. Then Scan.
 
+**WSL + Windows Burp:** If you run the daemon in WSL/Kali and Burp on Windows, run `install.ps1` on Windows once: it detects the WSL IP, writes `%USERPROFILE%\.unveil\config.json`, and (as admin) adds a firewall rule so Burp can reach the daemon. The extension loads the daemon URL from that config. In WSL run `UNVEIL_DAEMON_HOST=0.0.0.0 unveil` (or `python -m unveil.daemon`) so the daemon listens on all interfaces. In the Unveil tab use **Test connection** to confirm; then Scan. Findings populate the **Target** site map and **Issue Activity** tab.
+
 **From source (clone then install):**
 
 1. **Clone the repo:** `git clone https://github.com/Pa7ch3s/Unveil.git && cd Unveil`
