@@ -29,6 +29,9 @@ public class UnveilExtension implements BurpExtension {
         api.extension().setName("Unveil");
         api.logging().logToOutput("Unveil: initialize() called.");
 
+        // "Invisible Engine": heartbeat daemon; if down, auto-start unveil-daemon.exe (Windows) so user never touches a terminal
+        DaemonLauncher.tryStartBackendIfNeeded(api);
+
         Runnable register = () -> {
             api.logging().logToOutput("Unveil: creating tab component...");
             Component component;

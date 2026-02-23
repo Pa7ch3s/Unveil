@@ -55,9 +55,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install .
           pip install pyinstaller
-      - name: Build daemon exe
+      - name: Build daemon exe (no-console so Burp can start it hidden)
         run: |
-          pyinstaller --onefile -n unveil-daemon --collect-all unveil scripts/run_daemon.py
+          pyinstaller --onefile --noconsole -n unveil-daemon --collect-all unveil scripts/run_daemon.py
           dir dist
       - name: Upload exe
         uses: actions/upload-artifact@v4
