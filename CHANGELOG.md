@@ -4,6 +4,10 @@
 
 - (None.)
 
+## [0.10.10] / [0.7.6] — 2026-02-24
+
+- **Release workflow** — Explicit `tag_name` and asset verification step so releases and WIN exe upload reliably.
+
 ## [0.10.9] / [0.7.6] — 2026-02-24
 
 - **Release assets** — Ensure `unveil-engine-WIN.exe` is uploaded to GitHub Releases (WIN variant). Setup-Unveil-Windows.ps1 and Unveil-WIN-plug-and-play.zip use it; extension auto-starts it from `%LOCALAPPDATA%\Unveil\`.

@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $Repo = "Pa7ch3s/Unveil"
 $WinPath = Join-Path $env:LOCALAPPDATA "Unveil"
 $Api = "https://api.github.com/repos/$Repo/releases/latest"
-$FallbackTag = "v0.10.9"
+$FallbackTag = "v0.10.10"
 $FallbackEngineUrl = "https://github.com/$Repo/releases/download/$FallbackTag/unveil-engine-WIN.exe"
 $FallbackJarUrl = "https://github.com/$Repo/releases/download/$FallbackTag/unveil-burp-0.7.6.jar"
 
