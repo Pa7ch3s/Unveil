@@ -92,8 +92,9 @@ jobs:
           name: windows-daemon-exe
           path: windows-exe
 
-      - name: Create plug-and-play zip (Windows)
+      - name: Create Windows (WIN) engine exe and plug-and-play zips
         run: |
+          cp windows-exe/unveil-daemon.exe windows-exe/unveil-engine-WIN.exe
           mkdir -p unveil-burp-plug-and-play-windows
           find linux-build -name "unveil-burp-*.jar" -exec cp {} unveil-burp-plug-and-play-windows/ \;
           cp windows-exe/unveil-daemon.exe unveil-burp-plug-and-play-windows/
@@ -109,7 +110,22 @@ jobs:
           No Python or pip install needed.
           EOF
           zip -r unveil-burp-plug-and-play-windows.zip unveil-burp-plug-and-play-windows
-          ls -la unveil-burp-plug-and-play-windows.zip
+          mkdir -p Unveil-WIN-plug-and-play
+          find linux-build -name "unveil-burp-*.jar" -exec cp {} Unveil-WIN-plug-and-play/ \;
+          cp windows-exe/unveil-engine-WIN.exe Unveil-WIN-plug-and-play/
+          cat > Unveil-WIN-plug-and-play/README.txt << 'EOF'
+          Unveil — Windows-only (WIN) plug and play
+          ==========================================
+
+          WIN variant: use unveil-engine-WIN.exe. Extension auto-starts it from %LOCALAPPDATA%\Unveil.
+          Run Setup-Unveil-Windows.ps1 for one-click install, or drop these files into %LOCALAPPDATA%\Unveil.
+
+          1. Load unveil-burp-*.jar in Burp (Extensions → Add → Java).
+          2. Extension will auto-start unveil-engine-WIN.exe when you Scan (or run it manually).
+          3. In Unveil tab: Use daemon, URL http://127.0.0.1:8000. Click Scan.
+          EOF
+          zip -r Unveil-WIN-plug-and-play.zip Unveil-WIN-plug-and-play
+          ls -la windows-exe/ Unveil-WIN-plug-and-play.zip
 
       - name: Create Release and upload assets
         uses: softprops/action-gh-release@v2
@@ -118,7 +134,9 @@ jobs:
             linux-build/dist/*
             linux-build/unveil-burp/build/libs/unveil-burp-*.jar
             windows-exe/unveil-daemon.exe
+            windows-exe/unveil-engine-WIN.exe
             unveil-burp-plug-and-play-windows.zip
+            Unveil-WIN-plug-and-play.zip
           body_path: CHANGELOG.md
           generate_release_notes: true
 

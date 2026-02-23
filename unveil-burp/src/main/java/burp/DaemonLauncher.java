@@ -15,8 +15,9 @@ import java.util.concurrent.Executors;
 
 /**
  * "Invisible Engine" — when the extension loads, ping the daemon; if no response,
- * auto-start unveil-daemon.exe from the fixed path (Windows) so the user never touches a terminal.
- * Fixed path: Windows %LOCALAPPDATA%\\Unveil\\unveil-daemon.exe
+ * auto-start the Windows engine from the fixed path. Tries WIN-labeled exe first, then main.
+ * Fixed path: Windows %LOCALAPPDATA%\\Unveil\\
+ * Exe names (tried in order): unveil-engine-WIN.exe (Windows-only variant), unveil-daemon.exe (main).
  */
 public final class DaemonLauncher {
 
@@ -46,10 +47,11 @@ public final class DaemonLauncher {
                 if (isWindows()) {
                     String exePath = getWindowsExePath();
                     if (exePath != null && new File(exePath).isFile()) {
-                        startProcessHidden(exePath);
+                        File cwd = getWindowsInstallDir();
+                        startProcessHidden(exePath, cwd);
                         log.logToOutput("Unveil: backend started automatically from " + exePath);
                     } else {
-                        log.logToOutput("Unveil: backend not running; no exe at " + (exePath != null ? exePath : "LOCALAPPDATA\\Unveil\\unveil-daemon.exe") + ". Run install.ps1 or start daemon manually.");
+                        log.logToOutput("Unveil: backend not running; no exe at " + (exePath != null ? exePath : "LOCALAPPDATA\\Unveil\\unveil-engine-WIN.exe or unveil-daemon.exe") + ". Run Setup-Unveil-Windows.ps1 (WIN) or install.ps1.");
                     }
                 } else {
                     log.logToOutput("Unveil: backend not running at " + baseUrl + ". Start the daemon manually (e.g. run 'unveil' or load the Unveil tab and use Test connection).");
@@ -100,22 +102,36 @@ public final class DaemonLauncher {
         return os.toLowerCase(Locale.ROOT).startsWith("windows");
     }
 
+    /** Windows-only (WIN) exe first, then main daemon. Same dir: %LOCALAPPDATA%\\Unveil\\. */
     private static String getWindowsExePath() {
         String appData = System.getenv("LOCALAPPDATA");
         if (appData == null || appData.isEmpty()) return null;
-        return appData + File.separator + "Unveil" + File.separator + "unveil-daemon.exe";
+        String dir = appData + File.separator + "Unveil";
+        File winExe = new File(dir, "unveil-engine-WIN.exe");
+        if (winExe.isFile()) return winExe.getAbsolutePath();
+        File mainExe = new File(dir, "unveil-daemon.exe");
+        if (mainExe.isFile()) return mainExe.getAbsolutePath();
+        return dir + File.separator + "unveil-engine-WIN.exe";
+    }
+
+    private static File getWindowsInstallDir() {
+        String appData = System.getenv("LOCALAPPDATA");
+        if (appData == null || appData.isEmpty()) return null;
+        return new File(appData, "Unveil");
     }
 
     /**
-     * Start the exe without showing a console window (Windows: cmd /c start /B).
+     * Start the exe without showing a console window (Windows: cmd /c start /B). Cwd = install dir on Windows.
      */
-    private static void startProcessHidden(String exePath) throws IOException {
+    private static void startProcessHidden(String exePath, File workingDir) throws IOException {
         File exe = new File(exePath);
         String path = exe.getAbsolutePath();
         ProcessBuilder pb;
         if (isWindows()) {
-            // start /B "" "path" runs the exe in background; no new window
             pb = new ProcessBuilder("cmd.exe", "/c", "start", "/B", "", path);
+            if (workingDir != null && workingDir.isDirectory()) {
+                pb.directory(workingDir);
+            }
         } else {
             pb = new ProcessBuilder(path);
         }
