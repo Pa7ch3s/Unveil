@@ -5,11 +5,11 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://github.com/Pa7ch3s/Unveil)
 
 ---
-**Opaque binaries in. Attack surfaces out.**
+**Hidden complexity in. Priorities out.**
 ---
 > **Disclaimer:** This tool is for educational purposes and authorized security testing only. Unauthorized use against systems without prior written consent is strictly prohibited. The author accepts no liability for misuse or damage.
 ---
-Focuses on **exploit viability**, not just indicators.
+**Unveil** is built for packaged software: installers, thick clients, mobile bundles, hybrid stacks (Electron, Qt, .NET, and the rest). It pulls apart what is usually opaque and hands you a **short list of what to verify first**—where trust breaks, what persists, what connects to what, and what is actually worth a tester’s time. **Exploit viability over noise**, not another raw dump.
 
 > * File identification and metadata extraction
 > * Cryptographic hashing (MD5 / SHA1 / SHA256)
@@ -21,7 +21,7 @@ Focuses on **exploit viability**, not just indicators.
 
 ---
 
-Models: execution surfaces, trust boundaries, persistence anchors, and lateral bridges
+**Under the hood:** execution surfaces, trust boundaries, persistence anchors, and lateral bridges—mapped so you are not guessing where the story falls apart.
 
 ---
 

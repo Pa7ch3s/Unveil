@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- (None.)
+- **README** — Tagline: *Hidden complexity in. Priorities out.*; intro refocused on packaged software, ordered priorities, and viability over noise.
 
 ## [0.10.10] / [0.7.6] — 2026-02-24
 
