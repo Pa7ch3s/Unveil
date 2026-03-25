@@ -9,19 +9,19 @@
 ---
 > **Disclaimer:** This tool is for educational purposes and authorized security testing only. Unauthorized use against systems without prior written consent is strictly prohibited. The author accepts no liability for misuse or damage.
 ---
-**Unveil** is built for packaged software: installers, thick clients, mobile bundles, hybrid stacks (Electron, Qt, .NET, and the rest). It pulls apart what is usually opaque and hands you a **short list of what to verify first**—where trust breaks, what persists, what connects to what, and what is actually worth a tester’s time. **Exploit viability over noise**, not another raw dump.
+**Unveil** is built for packaged software: installers, thick clients, mobile bundles, hybrid stacks (Electron, Qt, .NET, and the rest). It pulls apart what is usually opaque and hands you a **short list of what to verify first**: where trust breaks, what persists, what connects to what, and what is actually worth a tester’s time. **Exploit viability over noise**, not another raw dump.
 
 > * File identification and metadata extraction
 > * Cryptographic hashing (MD5 / SHA1 / SHA256)
 > * Import and symbol inspection
 > * Entropy analysis (packed / protected detection)
 > * String harvesting
-> * Manifest parsing (APK permissions/components — *optional*, native scan included)
+> * Manifest parsing (APK permissions/components, *optional*; native scan included)
 > * Structured, JSON-first output
 
 ---
 
-**Under the hood:** execution surfaces, trust boundaries, persistence anchors, and lateral bridges—mapped so you are not guessing where the story falls apart.
+**Under the hood:** execution surfaces, trust boundaries, persistence anchors, and lateral bridges. The output is mapped so you are not guessing where the story falls apart.
 
 ---
 
@@ -78,7 +78,7 @@ rm -f ~/Library/Python/3.9/bin/unv ~/Library/Python/3.9/bin/unv-daemon
 hash -r
 ```
 
-3. Use a new terminal window, or run `unv` then Tab again — only `unveil` (and any other `unv*` tools you have) should appear.
+3. Use a new terminal window, or run `unv` then Tab again. Only `unveil` (and any other `unv*` tools you have) should appear.
 
 ---
 
